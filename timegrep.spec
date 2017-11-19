@@ -41,7 +41,7 @@ rm -rf %{buildroot}
 %files
 %defattr(-,root,root,-)
 %doc README.md
-%doc %{_mandir}/man1/timegrep.1%{?ext_man}
+%doc %{_mandir}/man1/timegrep.1*
 
 %{_bindir}/timegrep
 
