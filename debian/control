@@ -1,0 +1,25 @@
+Source: timegrep
+Section: utils
+Priority: optional
+Maintainer: Anton Batenev <antonbatenev@yandex.ru>
+Build-Depends: debhelper (>= 7.0.50~), libpcre3-dev
+Standards-Version: 3.9.4
+Vcs-Git: https://github.com/abbat/timegrep.git
+Vcs-Browser: https://github.com/abbat/timegrep
+Homepage: https://github.com/abbat/timegrep
+
+Package: timegrep
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: Utility to grep log between two dates
+ Utility to grep log between two dates or tail last
+ lines to time ago similar dategrep.
+
+Package: timegrep-dbg
+Section: debug
+Priority: extra
+Depends: timegrep (= ${binary:Version}), ${misc:Depends}
+Architecture: any
+Description: Debug symbols for timegrep
+ Utility to grep log between two dates or tail last
+ lines to time ago similar dategrep.

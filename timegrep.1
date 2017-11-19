@@ -1,0 +1,43 @@
+.TH timegrep 1 "Sep 28, 2016"
+.nh
+.ad left
+.SH NAME
+timegrep \- utility to grep log between two dates or tail last lines to time ago.
+.SH SYNTAX
+.B timegrep
+.RI [ options ] " " <files>
+.SH OPTIONS
+.TP
+.B --format, -e
+Datetime format (default: "default"). See strptime(3) for format details. See --help for list of format aliases.
+.TP
+.B --start, -f
+Datetime to start search (default: now).
+.TP
+.B --stop, -t
+Datetime to stop search (default: now).
+.TP
+.B --seconds, -s
+Seconds to substract from --start (default: 0).
+.TP
+.B --minutes, -m
+Minutes to substract from --start (default: 0).
+.TP
+.B --hours, -h
+Hours to substract from --start (default: 0).
+.TP
+.B --version, -v
+Print version and exit.
+.TP
+.B --help, -?
+Print brief help and exit.
+.SH EXIT CODE
+.TP
+.B 0
+Successful completion.
+.TP
+.B 1
+Nothing found.
+.TP
+.B 2
+General application error.
