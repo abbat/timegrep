@@ -58,5 +58,5 @@ $ timegrep --format=nginx --minutes=1 /var/log/nginx/access.log
 Grep datetime interval from archive log (sequential read data from `stdin`):
 
 ```
-$ zcat archive.log.gz | timegrep --start='2016:09:01 15:23:00' --stop='2016:09:01 16:32:00'
+$ zcat archive.log.gz | timegrep --start='2017:09:01 15:23:00' --stop='2017:09:01 16:32:00'
 ```
