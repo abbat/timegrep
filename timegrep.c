@@ -50,7 +50,7 @@
 /**
  * Program version for --version, -v
  */
-static const char* TG_VERSION = "0.3";
+static const char* TG_VERSION = "0.4alpha";
 
 /**
  * Chunk size for IO in bytes
@@ -1494,15 +1494,12 @@ int main(int argc, char* argv[])
 
             size = file_stat.st_size;
 
-            data = mmap(
-                NULL,
-                size,
-                PROT_READ,
-                MAP_SHARED,
-                fd,
-                0);
+            data = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
             if (data == MAP_FAILED)
                 goto ERROR;
+
+            close(fd);
+            fd = -1;
 
             result = file_timegrep(
                 data,
@@ -1520,9 +1517,6 @@ int main(int argc, char* argv[])
 
             munmap(data, size);
             data = MAP_FAILED;
-
-            close(fd);
-            fd = -1;
         }
     } else {
         result = stream_timegrep(
