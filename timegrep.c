@@ -572,6 +572,7 @@ static int tg_strptime(
 static int tg_atoi(const char* buffer)
 {
     long int result;
+
     result = strtol(buffer, NULL, 10);
     if (result < 0 || result >= INT_MAX)
         return TG_ERROR;
@@ -631,7 +632,6 @@ static int tg_atom(const char* buffer, int length)
 static long int atogmtoff(const char* buffer, int length)
 {
     long int result;
-
 
     if (length == 5) {
         // +0000
