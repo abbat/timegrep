@@ -1071,6 +1071,22 @@ static int binary_search(
 }
 
 /**
+ * give advice about use of memory like madvise
+ * and report errors to stderr instead return value
+ */
+static void tg_madvise(
+    const char* addr,
+    size_t      offset,
+    size_t      length,
+    int         advice
+)
+{
+    int result = madvise((void*)(addr + offset), length, advice);
+    if (result == -1)
+        fprintf(stderr, "%s madvise %s\n", gettext("ERROR:"), strerror(errno));
+}
+
+/**
  * File timegrep with binary search
  * Return TG_FOUND on success
  * Return TG_NOT_FOUND if nothing found
@@ -1092,9 +1108,12 @@ static int file_timegrep(
     size_t  lbound;
     size_t  ubound;
     ssize_t actual;
-    //long    page_size = sysconf(_SC_PAGESIZE);
+    size_t  lbound_aligned;
+    size_t  ubound_aligned;
+    size_t  page_size = getpagesize();
+    size_t  page_mask = ~(page_size - 1);
 
-    madvise((void*)data, size, MADV_RANDOM);
+    tg_madvise(data, 0, size, MADV_RANDOM);
 
     result = binary_search(
         data,
@@ -1111,8 +1130,9 @@ static int file_timegrep(
     if (result != TG_FOUND)
         return result;
 
-    // TODO:
-    //madvise((void*)data, lbound, MADV_DONTNEED);
+    lbound_aligned = lbound & page_mask;
+    if (lbound_aligned > 0)
+        tg_madvise(data, 0, lbound_aligned, MADV_DONTNEED);
 
     result = binary_search(
         data,
@@ -1129,9 +1149,14 @@ static int file_timegrep(
     if (result != TG_FOUND)
         return result;
 
-    // TODO:
-    //madvise((void*)data + ubound, size - ubound, MADV_DONTNEED);
-    //madvise((void*)data + lbound, ubound - lbound, MADV_SEQUENTIAL);
+    ubound_aligned = (ubound + page_size - 1) & page_mask;
+    if (ubound_aligned < size)
+        tg_madvise(data, ubound_aligned, size - ubound_aligned, MADV_DONTNEED);
+    else
+        ubound_aligned = size;
+
+    if (lbound_aligned < ubound_aligned)
+        tg_madvise(data, lbound_aligned, ubound_aligned - lbound_aligned, MADV_SEQUENTIAL);
 
     while (lbound < ubound) {
         actual = TG_CHUNK_SIZE;
@@ -1143,6 +1168,15 @@ static int file_timegrep(
             return TG_ERROR;
 
         lbound += actual;
+
+        // TODO: test it!
+        if (lbound_aligned + TG_CHUNK_SIZE < lbound) {
+            ubound_aligned = lbound & page_mask;
+            if (lbound_aligned < ubound_aligned)
+                tg_madvise(data, lbound_aligned, ubound_aligned - lbound_aligned, MADV_DONTNEED);
+
+            lbound_aligned = ubound_aligned;
+        }
     }
 
     if (ubound == size && write(STDOUT_FILENO, "\n", 1) == -1)
@@ -1504,7 +1538,7 @@ int main(int argc, char* argv[])
 
             size = file_stat.st_size;
 
-            data = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+            data = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
             if (data == MAP_FAILED)
                 goto ERROR;
 
