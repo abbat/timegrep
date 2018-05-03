@@ -1092,6 +1092,9 @@ static int file_timegrep(
     size_t  lbound;
     size_t  ubound;
     ssize_t actual;
+    //long    page_size = sysconf(_SC_PAGESIZE);
+
+    madvise((void*)data, size, MADV_RANDOM);
 
     result = binary_search(
         data,
@@ -1108,6 +1111,9 @@ static int file_timegrep(
     if (result != TG_FOUND)
         return result;
 
+    // TODO:
+    //madvise((void*)data, lbound, MADV_DONTNEED);
+
     result = binary_search(
         data,
         size,
@@ -1122,6 +1128,10 @@ static int file_timegrep(
 
     if (result != TG_FOUND)
         return result;
+
+    // TODO:
+    //madvise((void*)data + ubound, size - ubound, MADV_DONTNEED);
+    //madvise((void*)data + lbound, ubound - lbound, MADV_SEQUENTIAL);
 
     while (lbound < ubound) {
         actual = TG_CHUNK_SIZE;
