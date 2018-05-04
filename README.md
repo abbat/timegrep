@@ -2,6 +2,20 @@
 
 Utility to grep log between two dates or tail last lines to time ago similar [dategrep](https://github.com/mdom/dategrep) or [dateutils](https://github.com/hroptatyr/dateutils).
 
+## Examples
+
+Grep last minute from current nginx access log (binary search):
+
+```
+$ timegrep --format=nginx --minutes=1 /var/log/nginx/access.log
+```
+
+Grep datetime interval from archive log (sequential read data from `stdin`):
+
+```
+$ zcat archive.log.gz | timegrep --start='2017:09:01 15:23:00' --stop='2017:09:01 16:32:00'
+```
+
 ## Download / Install
 
 * [Debian, Ubuntu](http://software.opensuse.org/download.html?project=home:antonbatenev:timegrep&package=timegrep)
@@ -14,13 +28,6 @@ Utility to grep log between two dates or tail last lines to time ago similar [da
 $ git clone https://github.com/abbat/timegrep.git
 $ make && sudo make install
 ```
-
-## How to help
-
-* Translate this document or [man page](https://github.com/abbat/timegrep/blob/master/timegrep.1) to your native language;
-* Proofreading README.md or man page with your native language;
-* Share, Like, RT to your friends;
-* Send PRs if you are developer.
 
 ## Usage
 
@@ -44,19 +51,12 @@ See [strptime(3)](https://linux.die.net/man/3/strptime) for format details. See 
 ## Exit code
 
 * `0` - successful completion;
-* `1` - Nothing found;
+* `1` - nothing found;
 * `2` - general application error.
 
-## Examples
+## How to help
 
-Grep last minute from current nginx access log (binary search):
-
-```
-$ timegrep --format=nginx --minutes=1 /var/log/nginx/access.log
-```
-
-Grep datetime interval from archive log (sequential read data from `stdin`):
-
-```
-$ zcat archive.log.gz | timegrep --start='2017:09:01 15:23:00' --stop='2017:09:01 16:32:00'
-```
+* Translate this document or [man page](https://github.com/abbat/timegrep/blob/master/timegrep.1) to your native language;
+* Proofreading README.md or man page with your native language;
+* Share, Like, RT to your friends;
+* Send PRs if you are developer.
