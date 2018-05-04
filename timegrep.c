@@ -99,6 +99,11 @@ static const struct {
         NULL,
         "%b %d %H:%M:%S"
     },
+    {
+        "tskv",
+        NULL,
+        "unixtime=%s"
+    },
     { "apache", "common", NULL },
     { "nginx",  "common", NULL },
     { NULL,     NULL,     NULL }
