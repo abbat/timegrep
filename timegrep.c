@@ -78,7 +78,7 @@ static const struct {
     const char* name;     // format name
     const char* alias;    // format alias
     const char* format;   // datetime format (see strptime)
-} KNOWN_FORMATS[] = {
+} TG_FORMATS[] = {
     {
         "default",
         NULL,
@@ -187,19 +187,19 @@ static void print_help()
 
     m = 0;
     i = 0;
-    while (KNOWN_FORMATS[i].name != NULL) {
-        l = strlen(KNOWN_FORMATS[i].name);
+    while (TG_FORMATS[i].name != NULL) {
+        l = strlen(TG_FORMATS[i].name);
         if (l > m)
             m = l;
         i++;
     }
 
     i = 0;
-    while (KNOWN_FORMATS[i].name != NULL) {
-        if (KNOWN_FORMATS[i].alias != NULL)
-            printf("   %-*s -- %s '%s'\n", m, KNOWN_FORMATS[i].name, gettext("alias for"), KNOWN_FORMATS[i].alias);
+    while (TG_FORMATS[i].name != NULL) {
+        if (TG_FORMATS[i].alias != NULL)
+            printf("   %-*s -- %s '%s'\n", m, TG_FORMATS[i].name, gettext("alias for"), TG_FORMATS[i].alias);
         else
-            printf("   %-*s -- %s\n", m, KNOWN_FORMATS[i].name, KNOWN_FORMATS[i].format);
+            printf("   %-*s -- %s\n", m, TG_FORMATS[i].name, TG_FORMATS[i].format);
         i++;
     }
 
@@ -853,7 +853,7 @@ static int tg_strptime_re(
  */
 int tg_strptime_heuristic(const char* string, time_t* timestamp)
 {
-    if (tg_strptime(string, KNOWN_FORMATS[0].format, 0, timestamp) == TG_FOUND)
+    if (tg_strptime(string, TG_FORMATS[0].format, 0, timestamp) == TG_FOUND)
         return TG_FOUND;
 
     if (tg_strptime(string, "%Y-%m-%d", 0, timestamp) == TG_FOUND)
@@ -1395,15 +1395,15 @@ int parse_options(int argc, char* argv[], tg_context* ctx)
 
     if (ctx->re_ctx.format != NULL) {
         index = 0;
-        while (KNOWN_FORMATS[index].name != NULL) {
-            if (strcmp(ctx->re_ctx.format, KNOWN_FORMATS[index].name) == 0) {
-                if (KNOWN_FORMATS[index].alias != NULL) {
-                    ctx->re_ctx.format = KNOWN_FORMATS[index].alias;
+        while (TG_FORMATS[index].name != NULL) {
+            if (strcmp(ctx->re_ctx.format, TG_FORMATS[index].name) == 0) {
+                if (TG_FORMATS[index].alias != NULL) {
+                    ctx->re_ctx.format = TG_FORMATS[index].alias;
                     index       = 0;
                     continue;
                 }
 
-                ctx->re_ctx.format = KNOWN_FORMATS[index].format;
+                ctx->re_ctx.format = TG_FORMATS[index].format;
 
                 break;
             }
@@ -1411,7 +1411,7 @@ int parse_options(int argc, char* argv[], tg_context* ctx)
             index++;
         }
     } else
-        ctx->re_ctx.format = KNOWN_FORMATS[0].format;
+        ctx->re_ctx.format = TG_FORMATS[0].format;
 
     memset(&ctx->re_ctx.re_opt, 0, sizeof(ctx->re_ctx.re_opt));
 
