@@ -1127,16 +1127,7 @@ static int tg_binary_search(
  * Return TG_NULL if whole data is single string without delimeter
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
-static int tg_file_timegrep(
-    const char*        data,    // multiline data
-    size_t             size,    // size of multiline data
-    time_t             start,   // start timestamp to search
-    time_t             stop,    // stop timestamp to search
-    const pcre*        re,      // compiled regular expression for datetime
-    const pcre_extra*  extra,   // optimized regular expression for datetime
-    const tg_pcre_nsi* nsi,     // named regular expressions indexes or fallback flag
-    const char*        format   // datetime format (see strptime)
-)
+static int tg_file_timegrep(const tg_context* ctx)
 {
     int     result;
     size_t  lbound;
@@ -1148,14 +1139,14 @@ static int tg_file_timegrep(
     size_t  page_mask = ~(page_size - 1);
 
     result = tg_binary_search(
-        data,
-        size,
+        ctx->data,
+        ctx->size,
         0,
-        start,
-        re,
-        extra,
-        nsi,
-        format,
+        ctx->start,
+        ctx->parser.re,
+        ctx->parser.extra,
+        &ctx->parser.nsi,
+        ctx->parser.format,
         &lbound
     );
 
@@ -1163,14 +1154,14 @@ static int tg_file_timegrep(
         return result;
 
     result = tg_binary_search(
-        data,
-        size,
+        ctx->data,
+        ctx->size,
         lbound,
-        stop,
-        re,
-        extra,
-        nsi,
-        format,
+        ctx->stop,
+        ctx->parser.re,
+        ctx->parser.extra,
+        &ctx->parser.nsi,
+        ctx->parser.format,
         &ubound
     );
 
@@ -1183,7 +1174,7 @@ static int tg_file_timegrep(
         if (lbound + actual >= ubound)
             actual = ubound - lbound;
 
-        actual = write(STDOUT_FILENO, &data[lbound], actual);
+        actual = write(STDOUT_FILENO, ctx->data + lbound, actual);
         if (actual == -1)
             return TG_ERROR;
 
@@ -1192,13 +1183,13 @@ static int tg_file_timegrep(
         if (lbound_aligned + TG_CHUNK_SIZE < lbound) {
             ubound_aligned = lbound & page_mask;
             if (lbound_aligned < ubound_aligned)
-                madvise((void*)(data + lbound_aligned), ubound_aligned - lbound_aligned, MADV_DONTNEED);
+                madvise((void*)(ctx->data + lbound_aligned), ubound_aligned - lbound_aligned, MADV_DONTNEED);
 
             lbound_aligned = ubound_aligned;
         }
     }
 
-    if (ubound == size && write(STDOUT_FILENO, "\n", 1) == -1)
+    if (ubound == ctx->size && write(STDOUT_FILENO, "\n", 1) == -1)
         return TG_ERROR;
 
     return TG_FOUND;
@@ -1562,17 +1553,8 @@ int main(int argc, char* argv[])
             close(ctx.fd);
             ctx.fd = -1;
 
-            result = tg_file_timegrep(
-                ctx.data,
-                ctx.size,
-                ctx.start,
-                ctx.stop,
-                ctx.parser.re,
-                ctx.parser.extra,
-                &ctx.parser.nsi,
-                ctx.parser.format
-            );
-
+            // FIXME: for many files may be different result
+            result = tg_file_timegrep(&ctx);
             if (result == TG_ERROR)
                 goto ERROR;
 
