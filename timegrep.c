@@ -111,7 +111,6 @@ static const struct {
 
 /**
  * tg_strptime_re named subexpressions indexes
- * fallback is a flag to force use tg_strptime
  */
 typedef struct {
     int year;
@@ -123,7 +122,6 @@ typedef struct {
     int second;
     int timezone;
     int timestamp;
-    int fallback;
 } tg_pcre_nsi;
 
 /**
@@ -135,10 +133,12 @@ typedef tg_pcre_nsi tg_pcre_nsc;
  * datetime parser context
  */
 typedef struct {
-    pcre*       re;       // compiled regular expression for datetime
-    pcre_extra* extra;    // optimized regular expression for datetime
-    tg_pcre_nsi nsi;      // named regular expressions indexes or fallback flag
-    const char* format;   // datetime format for tg_strptime
+    pcre*       re;          // compiled regular expression for datetime
+    pcre_extra* extra;       // optimized regular expression for datetime
+    tg_pcre_nsi nsi;         // named regular expressions indexes or fallback flag
+    const char* format;      // datetime format for tg_strptime
+    int         format_tz;   // datetime format use timezone information
+    int         fallback;    // force use tg_strptime
 } tg_parser;
 
 /**
@@ -546,7 +546,7 @@ static size_t tg_strptime_regex_nsc(const char* format, char* regex, int* fallba
  * Return length of result regex on success
  * Retrun TG_ERROR on error
  */
-static size_t tg_strptime_regex(const char* format, char* regex, int* fallback)
+static size_t tg_strptime_regex(const char* format, char* regex, int* format_tz, int* fallback)
 {
     size_t      result;
     int         holder;
@@ -554,6 +554,8 @@ static size_t tg_strptime_regex(const char* format, char* regex, int* fallback)
 
     if (fallback == NULL)
         fallback = &holder;
+    else
+        *fallback = 0;
 
     result = tg_strptime_regex_nsc(format, regex, fallback, &nsc);
 
@@ -580,6 +582,13 @@ static size_t tg_strptime_regex(const char* format, char* regex, int* fallback)
         ) > 1)
     )
         *fallback = 1;
+
+    if (format_tz != NULL) {
+        if (nsc.timezone > 0)
+            *format_tz = 1;
+        else
+            *format_tz = 0;
+    }
 
     return result;
 }
@@ -855,6 +864,7 @@ static int tg_strptime_re(
         return TG_FOUND;
     }
 
+    // FIXME: WTF?!
     if (nsi->timezone == 0)
         tm_gmtoff = TG_TIMEZONE;
     else
@@ -902,20 +912,17 @@ int tg_strptime_heuristic(const char* string, time_t* timestamp)
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_get_timestamp(
-    const char*        string,     // source string
-    size_t             length,     // source string length
-    const pcre*        re,         // compiled regular expression for datetime
-    const pcre_extra*  extra,      // optimized regular expression for datetime
-    const tg_pcre_nsi* nsi,        // named regular expressions indexes or fallback flag
-    const char*        format,     // datetime format (see strptime)
-    time_t*            timestamp   // result timestamp
+    const char*      string,     // source string
+    size_t           length,     // source string length
+    const tg_parser* parser,     // datetime parser context
+    time_t*          timestamp   // result timestamp
 )
 {
     int         result;
     const char* match;
     int         matches[30];
 
-    result = pcre_exec(re, extra, string, length, 0, 0, matches, sizeof(matches) / sizeof(int));
+    result = pcre_exec(parser->re, parser->extra, string, length, 0, 0, matches, sizeof(matches) / sizeof(int));
     if (result < 0) {
         switch (result) {
             case PCRE_ERROR_NOMATCH:
@@ -935,7 +942,9 @@ static int tg_get_timestamp(
         return TG_ERROR;
     }
 
-    if (nsi->fallback != 0) {
+    if (parser->fallback == 0)
+        result = tg_strptime_re(string, matches, result, &parser->nsi, timestamp);
+    else {
         result = pcre_get_substring(string, matches, result, 0, &match);
         if (result < 0) {
             if (result == PCRE_ERROR_NOMEMORY)
@@ -948,11 +957,10 @@ static int tg_get_timestamp(
             return TG_ERROR;
         }
 
-        result = tg_strptime(match, format, nsi->timezone, timestamp);
+        result = tg_strptime(match, parser->format, parser->format_tz, timestamp);
 
         pcre_free_substring(match);
-    } else
-        result = tg_strptime_re(string, matches, result, nsi, timestamp);
+    }
 
     return result;
 }
@@ -982,7 +990,7 @@ static int tg_get_string(
     else
         *start = nl - data + 1;
 
-    nl = memchr(&data[position], '\n', size - position);
+    nl = memchr(data + position, '\n', size - position);
     if (nl == NULL)
         *length = size - (*start);
     else
@@ -1002,17 +1010,14 @@ static int tg_get_string(
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_forward_search(
-    const char*        data,       // multiline data
-    size_t             size,       // size of multiline data
-    size_t             position,   // position to start search
-    size_t             ubound,     // upper bound position to search
-    const pcre*        re,         // compiled regular expression for datetime
-    const pcre_extra*  extra,      // optimized regular expression for datetime
-    const tg_pcre_nsi* nsi,        // named regular expressions indexes or fallback flag
-    const char*        format,     // datetime format (see strptime)
-    size_t*            start,      // result string start
-    size_t*            length,     // result string length (not including delimeter)
-    time_t*            timestamp   // result timestamp
+    const char*      data,       // multiline data
+    size_t           size,       // size of multiline data
+    size_t           position,   // position to start search
+    size_t           ubound,     // upper bound position to search
+    const tg_parser* parser,     // datetime parser context
+    size_t*          start,      // result string start
+    size_t*          length,     // result string length (not including delimeter)
+    time_t*          timestamp   // result timestamp
 )
 {
     int    result;
@@ -1024,16 +1029,7 @@ static int tg_forward_search(
     while (result == TG_NOT_FOUND && position < ubound) {
         result = tg_get_string(data, size, position, &_start, &_length);
         if (result == TG_FOUND) {
-            result = tg_get_timestamp(
-                &data[_start],
-                _length,
-                re,
-                extra,
-                nsi,
-                format,
-                &_timestamp
-            );
-
+            result = tg_get_timestamp(data + _start, _length, parser, &_timestamp);
             if (result == TG_NOT_FOUND)
                 position = _start + _length + 1;
         } else if (result == TG_NULL)
@@ -1059,15 +1055,12 @@ static int tg_forward_search(
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_binary_search(
-    const char*        data,      // multiline data
-    size_t             size,      // size of multiline data
-    size_t             lbound,    // recommended lower bound postion to search
-    time_t             search,    // timestamp to search
-    const pcre*        re,        // compiled regular expression for datetime
-    const pcre_extra*  extra,     // optimized regular expression for datetime
-    const tg_pcre_nsi* nsi,       // named regular expressions indexes or fallback flag
-    const char*        format,    // datetime format (see strptime)
-    size_t*            position   // result string start
+    const char*      data,      // multiline data
+    size_t           size,      // size of multiline data
+    size_t           lbound,    // recommended lower bound postion to search
+    time_t           search,    // timestamp to search
+    const tg_parser* parser,    // datetime parser context
+    size_t*          position   // result string start
 )
 {
     int    result;
@@ -1087,10 +1080,7 @@ static int tg_binary_search(
             size,
             middle,
             ubound,
-            re,
-            extra,
-            nsi,
-            format,
+            parser,
             &start,
             &length,
             &timestamp
@@ -1143,10 +1133,7 @@ static int tg_file_timegrep(const tg_context* ctx)
         ctx->size,
         0,
         ctx->start,
-        ctx->parser.re,
-        ctx->parser.extra,
-        &ctx->parser.nsi,
-        ctx->parser.format,
+        &ctx->parser,
         &lbound
     );
 
@@ -1158,10 +1145,7 @@ static int tg_file_timegrep(const tg_context* ctx)
         ctx->size,
         lbound,
         ctx->stop,
-        ctx->parser.re,
-        ctx->parser.extra,
-        &ctx->parser.nsi,
-        ctx->parser.format,
+        &ctx->parser,
         &ubound
     );
 
@@ -1274,7 +1258,7 @@ static int tg_stream_timegrep(const tg_context* ctx)
         else if (result == TG_NOT_FOUND)
             break;
 
-        result = tg_get_timestamp(data + lbound, length, ctx->parser.re, ctx->parser.extra, &ctx->parser.nsi, ctx->parser.format, &timestamp);
+        result = tg_get_timestamp(data + lbound, length, &ctx->parser, &timestamp);
         if (result == TG_ERROR)
             goto ERROR;
 
@@ -1426,7 +1410,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
     } else
         ctx->parser.format = TG_FORMATS[0].format;
 
-    regex_len = tg_strptime_regex(ctx->parser.format, NULL, NULL);
+    regex_len = tg_strptime_regex(ctx->parser.format, NULL, NULL, NULL);
     if (regex_len == TG_ERROR)
         goto ERROR;
 
@@ -1436,7 +1420,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
 
     regex[regex_len] = 0;
 
-    if (tg_strptime_regex(ctx->parser.format, regex, &ctx->parser.nsi.fallback) == TG_ERROR)
+    if (tg_strptime_regex(ctx->parser.format, regex, &ctx->parser.format_tz, &ctx->parser.fallback) == TG_ERROR)
         goto ERROR;
 
     ctx->parser.re = pcre_compile(regex, PCRE_UTF8 | PCRE_DUPNAMES, &pcre_error, &pcre_offset, NULL);
@@ -1461,7 +1445,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
         goto ERROR;
     }
 
-    if (ctx->parser.nsi.fallback == 0) {
+    if (ctx->parser.fallback == 0) {
         ctx->parser.nsi.year      = pcre_get_stringnumber(ctx->parser.re, "year");
         ctx->parser.nsi.month     = pcre_get_stringnumber(ctx->parser.re, "month");
         ctx->parser.nsi.month_t   = pcre_get_stringnumber(ctx->parser.re, "month_t");
