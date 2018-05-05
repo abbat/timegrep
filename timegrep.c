@@ -128,6 +128,29 @@ typedef struct {
 } pcre_extra_opt;
 
 /**
+ * pcre context to search and parse datetime
+ */
+typedef struct {
+    pcre*          re;         // compiled regular expression for datetime
+    pcre_extra*    re_extra;   // optimized regular expression for datetime
+    pcre_extra_opt re_opt;     // named regular expressions indexes or fallback flag
+    const char*    format;     // datetime format
+} pcre_context;
+
+/**
+ * working context
+ */
+typedef struct {
+    const char*    filename;   // current filename
+    int            fd;         // file descriptor
+    size_t         size;       // size of file / mapped memory
+    char*          data;       // mapped memory
+    time_t         start;      // timestamp from search
+    time_t         stop;       // timestamp to search
+    pcre_context   re_ctx;     // pcre context to search and parse datetime
+} tg_context;
+
+/**
  * Print program name and version
  */
 static void print_version()
@@ -722,11 +745,11 @@ static long int atogmtoff(const char* buffer, int length)
  * Return TG_ERROR on error - so we need fallback
  */
 static int tg_strptime_re(
-    const char*     string,        // source string (pcre_exec subject)
-    int*            matches,       // offset vector that pcre_exec used
-    int             count,         // value returned by pcre_exec
-    pcre_extra_opt* re_opt,        // named regular expressions indexes or fallback flag
-    time_t*         timestamp      // result timestamp
+    const char*           string,     // source string (pcre_exec subject)
+    int*                  matches,    // offset vector that pcre_exec used
+    int                   count,      // value returned by pcre_exec
+    const pcre_extra_opt* re_opt,     // named regular expressions indexes or fallback flag
+    time_t*               timestamp   // result timestamp
 )
 {
     int       result;
@@ -857,13 +880,13 @@ int tg_strptime_heuristic(const char* string, time_t* timestamp)
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int get_timestamp(
-    const char*       string,      // source string
-    size_t            length,      // source string length
-    const pcre*       re,          // compiled regular expression for datetime
-    const pcre_extra* re_extra,    // optimized regular expression for datetime
-    pcre_extra_opt*   re_opt,      // named regular expressions indexes or fallback flag
-    const char*       format,      // datetime format (see strptime)
-    time_t*           timestamp    // result timestamp
+    const char*           string,     // source string
+    size_t                length,     // source string length
+    const pcre*           re,         // compiled regular expression for datetime
+    const pcre_extra*     re_extra,   // optimized regular expression for datetime
+    const pcre_extra_opt* re_opt,     // named regular expressions indexes or fallback flag
+    const char*           format,     // datetime format (see strptime)
+    time_t*               timestamp   // result timestamp
 )
 {
     int         result;
@@ -1165,7 +1188,7 @@ static int file_timegrep(
  * Return TG_NOT_FOUND on EOF
  * Retrun TG_ERROR on error, errno is set on system error
  */
-static int read_stram_string(
+static int read_stream_string(
     int     fd,       // file descriptor
     char**  data,     // frame data (may be reallocated)
     size_t* size,     // frame size (may be resized)
@@ -1219,47 +1242,33 @@ static int read_stram_string(
  * Return TG_NOT_FOUND if nothing found
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
-static int stream_timegrep(
-    int               fd,         // file descriptor
-    time_t            start,      // start timestamp to search
-    time_t            stop,       // stop timestamp to search
-    const pcre*       re,         // compiled regular expression for datetime
-    const pcre_extra* re_extra,   // optimized regular expression for datetime
-    pcre_extra_opt*   re_opt,     // named regular expressions indexes or fallback flag
-    const char*       format      // datetime format (see strptime)
-)
+static int stream_timegrep(const tg_context* ctx)
 {
     int     result;
-    char*   data;
-    size_t  size;
-    size_t  lbound;
-    size_t  ubound;
+    ssize_t actual;
     size_t  length;
     time_t  timestamp;
-    int     stream;
-    ssize_t actual;
-
-    data   = NULL;
-    size   = 0;
-    lbound = 0;
-    ubound = 0;
-    stream = 0;
+    char*   data   = NULL;
+    size_t  size   = 0;
+    size_t  lbound = 0;
+    size_t  ubound = 0;
+    int     stream = 0;
 
     while (1) {
-        result = read_stram_string(fd, &data, &size, lbound, &ubound, &length);
+        result = read_stream_string(ctx->fd, &data, &size, lbound, &ubound, &length);
         if (result == TG_ERROR)
             goto ERROR;
         else if (result == TG_NOT_FOUND)
             break;
 
-        result = get_timestamp(&data[lbound], length, re, re_extra, re_opt, format, &timestamp);
+        result = get_timestamp(data + lbound, length, ctx->re_ctx.re, ctx->re_ctx.re_extra, &ctx->re_ctx.re_opt, ctx->re_ctx.format, &timestamp);
         if (result == TG_ERROR)
             goto ERROR;
 
         if (result == TG_FOUND) {
-            if (timestamp >= stop)
+            if (timestamp >= ctx->stop)
                 break;
-            else if (stream == 0 && timestamp >= start)
+            else if (stream == 0 && timestamp >= ctx->start)
                 stream = 1;
         }
 
@@ -1267,7 +1276,7 @@ static int stream_timegrep(
             length++;
 
             while (length > 0) {
-                actual = write(STDOUT_FILENO, &data[lbound], length);
+                actual = write(STDOUT_FILENO, data + lbound, length);
                 if (actual == -1)
                     goto ERROR;
 
@@ -1278,7 +1287,7 @@ static int stream_timegrep(
             lbound += length + 1;
 
         if (ubound - lbound < lbound) {
-            memmove(data, &data[lbound], ubound - lbound);
+            memmove(data, data + lbound, ubound - lbound);
 
             ubound = ubound - lbound;
             lbound = 0;
@@ -1301,59 +1310,30 @@ ERROR:
 }
 
 /**
- * Main magic
+ * Parse command line options
+ * Return TG_FOUND on success
+ * Return TG_NOT_FOUND if nothing to do (help or version printed)
+ * Retrun TG_ERROR on error
  */
-int main(int argc, char* argv[])
+int parse_options(int argc, char* argv[], tg_context* ctx)
 {
-    int result;
-
     // options parsing
-    int         index;      // option index
-    int         option;     // option name
-    long int    value;      // option numeric value
+    int      index;    // option index
+    int      option;   // option name
+    long int value;    // option numeric value
 
     // options values
-    const char* filename;   // filename to parse
-    const char* from;       // from datetime
-    const char* to;         // to datetime
-    const char* format;     // datetime format
-
-    // working context
-    int         fd;         // file descriptor
-    size_t      size;       // size of file / mapped memory
-    char*       data;       // mapped memory
-    time_t      start;      // timestamp from search
-    time_t      stop;       // timestamp to search
-    long int    offset;     // offset in seconds from now
-
-    // io
-    struct stat file_stat;
+    const char* from   = NULL;   // from datetime
+    const char* to     = NULL;   // to datetime
+    long int    offset = 0;      // offset in seconds from now
 
     // pcre
-    char*          regex;         // format regular expression
-    const char*    pcre_error;    // current pcre error message
-    int            pcre_offset;   // current pcre error offset
-    pcre*          re;            // compiled regular expression for datetime
-    pcre_extra*    re_extra;      // optimized regular expression for datetime
-    pcre_extra_opt re_opt;        // named regular expressions indexes or fallback flag
+    char*       regex       = NULL;   // format regular expression
+    size_t      regex_len   = 0;      // length of regex string
+    const char* pcre_error  = NULL;   // current pcre error message
+    int         pcre_offset = 0;      // current pcre error offset
 
-    result = TG_FOUND;
-
-    filename = NULL;
-    from     = NULL;
-    to       = NULL;
-    format   = NULL;
-
-    fd     = -1;
-    size   = 0;
-    data   = MAP_FAILED;
-    offset = 0;
-
-    regex     = NULL;
-    re        = NULL;
-    re_extra  = NULL;
-
-    set_timezone();
+    int result = TG_NOT_FOUND;
 
     while (1) {
         static struct option long_options[] = {
@@ -1375,7 +1355,7 @@ int main(int argc, char* argv[])
 
         switch (option) {
             case 'e':
-                format = optarg;
+                ctx->re_ctx.format = optarg;
                 break;
             case 'f':
                 from = optarg;
@@ -1408,21 +1388,22 @@ int main(int argc, char* argv[])
                 print_help();
                 goto SUCCESS;
             default:
-                return 1;
+                print_help();
+                goto SUCCESS;
         }
     }
 
-    if (format != NULL) {
+    if (ctx->re_ctx.format != NULL) {
         index = 0;
         while (KNOWN_FORMATS[index].name != NULL) {
-            if (strcmp(format, KNOWN_FORMATS[index].name) == 0) {
+            if (strcmp(ctx->re_ctx.format, KNOWN_FORMATS[index].name) == 0) {
                 if (KNOWN_FORMATS[index].alias != NULL) {
-                    format = KNOWN_FORMATS[index].alias;
-                    index  = 0;
+                    ctx->re_ctx.format = KNOWN_FORMATS[index].alias;
+                    index       = 0;
                     continue;
                 }
 
-                format = KNOWN_FORMATS[index].format;
+                ctx->re_ctx.format = KNOWN_FORMATS[index].format;
 
                 break;
             }
@@ -1430,34 +1411,34 @@ int main(int argc, char* argv[])
             index++;
         }
     } else
-        format = KNOWN_FORMATS[0].format;
+        ctx->re_ctx.format = KNOWN_FORMATS[0].format;
 
-    memset(&re_opt, 0, sizeof(re_opt));
+    memset(&ctx->re_ctx.re_opt, 0, sizeof(ctx->re_ctx.re_opt));
 
-    size = strptime_regex(format, NULL, &re_opt);
-    if (size == TG_ERROR)
+    regex_len = strptime_regex(ctx->re_ctx.format, NULL, &ctx->re_ctx.re_opt);
+    if (regex_len == TG_ERROR)
         goto ERROR;
 
-    memset(&re_opt, 0, sizeof(re_opt));
-
-    regex = malloc(size + 1);
+    regex = malloc(regex_len + 1);
     if (regex == NULL)
         goto ERROR;
 
-    regex[size] = 0;
+    regex[regex_len] = 0;
 
-    if (strptime_regex(format, regex, &re_opt) == TG_ERROR)
+    memset(&ctx->re_ctx.re_opt, 0, sizeof(ctx->re_ctx.re_opt));
+
+    if (strptime_regex(ctx->re_ctx.format, regex, &ctx->re_ctx.re_opt) == TG_ERROR)
         goto ERROR;
 
-    re = pcre_compile(regex, PCRE_UTF8 | PCRE_DUPNAMES, &pcre_error, &pcre_offset, NULL);
-    if (re == NULL) {
+    ctx->re_ctx.re = pcre_compile(regex, PCRE_UTF8 | PCRE_DUPNAMES, &pcre_error, &pcre_offset, NULL);
+    if (ctx->re_ctx.re == NULL) {
         errno = 0;
         fprintf(stderr, gettext("%s Could not compile '%s' at %d: %s\n"), gettext("ERROR:"), regex, pcre_offset, pcre_error);
         goto ERROR;
     }
 
-    re_extra = pcre_study(
-        re,
+    ctx->re_ctx.re_extra = pcre_study(
+        ctx->re_ctx.re,
 #ifdef PCRE_CONFIG_JIT
         PCRE_STUDY_JIT_COMPILE,
 #else
@@ -1471,81 +1452,118 @@ int main(int argc, char* argv[])
         goto ERROR;
     }
 
-    if (re_opt.fallback == 0) {
-        re_opt.has_year      = pcre_get_stringnumber(re, "year");
-        re_opt.has_month     = pcre_get_stringnumber(re, "month");
-        re_opt.has_month_t   = pcre_get_stringnumber(re, "month_t");
-        re_opt.has_day       = pcre_get_stringnumber(re, "day");
-        re_opt.has_hour      = pcre_get_stringnumber(re, "hour");
-        re_opt.has_minute    = pcre_get_stringnumber(re, "minute");
-        re_opt.has_second    = pcre_get_stringnumber(re, "second");
-        re_opt.has_timezone  = pcre_get_stringnumber(re, "timezone");
-        re_opt.has_timestamp = pcre_get_stringnumber(re, "timestamp");
+    if (ctx->re_ctx.re_opt.fallback == 0) {
+        ctx->re_ctx.re_opt.has_year      = pcre_get_stringnumber(ctx->re_ctx.re, "year");
+        ctx->re_ctx.re_opt.has_month     = pcre_get_stringnumber(ctx->re_ctx.re, "month");
+        ctx->re_ctx.re_opt.has_month_t   = pcre_get_stringnumber(ctx->re_ctx.re, "month_t");
+        ctx->re_ctx.re_opt.has_day       = pcre_get_stringnumber(ctx->re_ctx.re, "day");
+        ctx->re_ctx.re_opt.has_hour      = pcre_get_stringnumber(ctx->re_ctx.re, "hour");
+        ctx->re_ctx.re_opt.has_minute    = pcre_get_stringnumber(ctx->re_ctx.re, "minute");
+        ctx->re_ctx.re_opt.has_second    = pcre_get_stringnumber(ctx->re_ctx.re, "second");
+        ctx->re_ctx.re_opt.has_timezone  = pcre_get_stringnumber(ctx->re_ctx.re, "timezone");
+        ctx->re_ctx.re_opt.has_timestamp = pcre_get_stringnumber(ctx->re_ctx.re, "timestamp");
     }
 
     if (to == NULL)
-        stop = time(NULL);
-    else if (tg_strptime(to, format, re_opt.has_timezone, &stop) == TG_NOT_FOUND && tg_strptime_heuristic(to, &stop) == TG_NOT_FOUND) {
+        ctx->stop = time(NULL);
+    else if (tg_strptime(to, ctx->re_ctx.format, ctx->re_ctx.re_opt.has_timezone, &ctx->stop) == TG_NOT_FOUND && tg_strptime_heuristic(to, &ctx->stop) == TG_NOT_FOUND) {
         errno = 0;
         fprintf(stderr, gettext("%s Can not convert argument '%s' to timestamp\n"), gettext("ERROR:"), to);
         goto ERROR;
     }
 
     if (from == NULL)
-        start = stop - offset;
-    else if (tg_strptime(from, format, re_opt.has_timezone, &start) == TG_NOT_FOUND && tg_strptime_heuristic(from, &start) == TG_NOT_FOUND) {
+        ctx->start = ctx->stop - offset;
+    else if (tg_strptime(from, ctx->re_ctx.format, ctx->re_ctx.re_opt.has_timezone, &ctx->start) == TG_NOT_FOUND && tg_strptime_heuristic(from, &ctx->start) == TG_NOT_FOUND) {
         errno = 0;
         fprintf(stderr, gettext("%s Can not convert argument '%s' to timestamp\n"), gettext("ERROR:"), from);
         goto ERROR;
     }
 
+    result = TG_FOUND;
+
+    goto SUCCESS;
+
+ERROR:
+
+    result = TG_ERROR;
+
+    if (errno != 0) {
+        fprintf(stderr, "%s %s\n", gettext("ERROR:"), strerror(errno));
+        errno = 0;
+    }
+
+SUCCESS:
+
+    if (regex != NULL)
+        free(regex);
+
+    return result;
+}
+
+/**
+ * Main magic
+ */
+int main(int argc, char* argv[])
+{
+    int         result;
+    struct stat file_stat;
+    tg_context  ctx;
+
+    set_timezone();
+
+    memset(&ctx, 0, sizeof(ctx));
+
+    ctx.fd   = -1;
+    ctx.data = MAP_FAILED;
+
+    result = parse_options(argc, argv, &ctx);
+    if (result == TG_NOT_FOUND) {
+        result = 0;
+        goto SUCCESS;
+    } else if (result == TG_ERROR)
+        goto ERROR;
+
     if (optind < argc) {
         while (optind < argc) {
-            filename = argv[optind++];
+            ctx.filename = argv[optind++];
 
-            fd = open(filename, O_RDONLY);
-            if (fd == -1)
+            ctx.fd = open(ctx.filename, O_RDONLY);
+            if (ctx.fd == -1)
                 goto ERROR;
 
-            if (fstat(fd, &file_stat) == -1)
+            if (fstat(ctx.fd, &file_stat) == -1)
                 goto ERROR;
 
-            size = file_stat.st_size;
+            ctx.size = file_stat.st_size;
 
-            data = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-            if (data == MAP_FAILED)
+            ctx.data = mmap(NULL, ctx.size, PROT_READ, MAP_PRIVATE, ctx.fd, 0);
+            if (ctx.data == MAP_FAILED)
                 goto ERROR;
 
-            close(fd);
-            fd = -1;
+            close(ctx.fd);
+            ctx.fd = -1;
 
             result = file_timegrep(
-                data,
-                size,
-                start,
-                stop,
-                re,
-                re_extra,
-                &re_opt,
-                format
+                ctx.data,
+                ctx.size,
+                ctx.start,
+                ctx.stop,
+                ctx.re_ctx.re,
+                ctx.re_ctx.re_extra,
+                &ctx.re_ctx.re_opt,
+                ctx.re_ctx.format
             );
 
             if (result == TG_ERROR)
                 goto ERROR;
 
-            munmap(data, size);
-            data = MAP_FAILED;
+            munmap(ctx.data, ctx.size);
+            ctx.data = MAP_FAILED;
         }
     } else {
-        result = stream_timegrep(
-            STDIN_FILENO,
-            start,
-            stop,
-            re,
-            re_extra,
-            &re_opt,
-            format
-        );
+        ctx.fd = STDIN_FILENO;
+        result = stream_timegrep(&ctx);
     }
 
     result = (result == TG_FOUND ? 0 : 1);
@@ -1561,24 +1579,21 @@ ERROR:
 
 SUCCESS:
 
-    if (regex != NULL)
-        free(regex);
+    if (ctx.re_ctx.re != NULL)
+        pcre_free(ctx.re_ctx.re);
 
-    if (re != NULL)
-        pcre_free(re);
-
-    if (re_extra != NULL)
+    if (ctx.re_ctx.re_extra != NULL)
 #ifdef PCRE_CONFIG_JIT
-        pcre_free_study(re_extra);
+        pcre_free_study(ctx.re_ctx.re_extra);
 #else
-        pcre_free(re_extra);
+        pcre_free(ctx.re_ctx.re_extra);
 #endif
 
-    if (data != MAP_FAILED)
-        munmap(data, size);
+    if (ctx.data != MAP_FAILED)
+        munmap(ctx.data, ctx.size);
 
-    if (fd != -1)
-        close(fd);
+    if (ctx.fd != -1 && ctx.fd != STDIN_FILENO)
+        close(ctx.fd);
 
     return result;
 }
