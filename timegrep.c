@@ -110,7 +110,7 @@ static const struct {
 };
 
 /**
- * strptime_regex named subexpressions
+ * tg_strptime_regex named subexpressions
  * has_* is a parsable named expressions
  * fallback is a flag to force use tg_strptime
  */
@@ -153,7 +153,7 @@ typedef struct {
 /**
  * Print program name and version
  */
-static void print_version()
+static void tg_print_version()
 {
     printf("timegrep %s\n", TG_VERSION);
 }
@@ -161,7 +161,7 @@ static void print_version()
 /**
  * Print usage
  */
-static void print_help()
+static void tg_print_help()
 {
     size_t i;
     size_t l;
@@ -214,7 +214,7 @@ static void print_help()
  * Set global TG_TIMEZONE variable,
  * so local time = GMT time + TG_TIMEZONE
  */
-static void set_timezone()
+static void tg_set_timezone()
 {
     time_t    t;
     struct tm tm;
@@ -233,7 +233,7 @@ static void set_timezone()
  * Return parsed value in seconds on success
  * Return LONG_MIN on error or invalid interval
  */
-static long int parse_interval(const char* string, long int multipler)
+static long int tg_parse_interval(const char* string, long int multipler)
 {
     long int value;
 
@@ -252,7 +252,7 @@ static long int parse_interval(const char* string, long int multipler)
  * Return length of result regex on success
  * Retrun TG_ERROR on error
  */
-static size_t strptime_regex(const char* format, char* regex, pcre_extra_opt* re_opt)
+static size_t tg_strptime_regex(const char* format, char* regex, pcre_extra_opt* re_opt)
 {
     char        c;
     size_t      format_index;
@@ -308,7 +308,7 @@ static size_t strptime_regex(const char* format, char* regex, pcre_extra_opt* re
                 // timegrep use heuristic here
                 case 'c':
                     part         = NULL;
-                    regex_index += strptime_regex("%x %X", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%x %X", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // The century number (0-99)
@@ -327,7 +327,7 @@ static size_t strptime_regex(const char* format, char* regex, pcre_extra_opt* re
                 // Equivalent to %m/%d/%y (American style date)
                 case 'D':
                     part         = NULL;
-                    regex_index += strptime_regex("%m/%d/%y", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%m/%d/%y", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // The hour (0-23)
@@ -376,13 +376,13 @@ static size_t strptime_regex(const char* format, char* regex, pcre_extra_opt* re
                 // The 12-hour clock time (using the locale's AM or PM), Equivalent to %I:%M:%S %p
                 case 'r':
                     part         = NULL;
-                    regex_index += strptime_regex("%I:%M:%S %p", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%I:%M:%S %p", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // Equivalent to %H:%M
                 case 'R':
                     part         = NULL;
-                    regex_index += strptime_regex("%H:%M", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%H:%M", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // The second (0-60)
@@ -394,7 +394,7 @@ static size_t strptime_regex(const char* format, char* regex, pcre_extra_opt* re
                 // Equivalent to %H:%M:%S
                 case 'T':
                     part         = NULL;
-                    regex_index += strptime_regex("%H:%M:%S", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%H:%M:%S", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // The week number with Sunday the first day of the week (0-53)
@@ -415,14 +415,14 @@ static size_t strptime_regex(const char* format, char* regex, pcre_extra_opt* re
                 // timegrep use %Y-%m-%d (also known as %F)
                 case 'x':
                     part         = NULL;
-                    regex_index += strptime_regex("%Y-%m-%d", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%Y-%m-%d", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // The time, using the locale's time format
                 // timegrep use %H:%M:%S (also known as %T)
                 case 'X':
                     part         = NULL;
-                    regex_index += strptime_regex("%H:%M:%S", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%H:%M:%S", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // The year within century (0-99)
@@ -452,7 +452,7 @@ static size_t strptime_regex(const char* format, char* regex, pcre_extra_opt* re
                 // Equivalent to %Y-%m-%d
                 case 'F':
                     part         = NULL;
-                    regex_index += strptime_regex("%Y-%m-%d", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
+                    regex_index += tg_strptime_regex("%Y-%m-%d", (regex == NULL ? NULL : &regex[regex_index]), re_opt);
                     break;
 
                 // The year corresponding to the ISO week number, but without the century (0-99)
@@ -610,7 +610,7 @@ static int tg_atoi(const char* buffer)
 
 /**
  * Convert a string representation of month name to a int
- * Month name buffer MUST be valid month name (strptime_regex ensure it)
+ * Month name buffer MUST be valid month name (tg_strptime_regex ensure it)
  * Return TG_ERROR on error
  */
 static int tg_atom(const char* buffer, int length)
@@ -654,10 +654,10 @@ static int tg_atom(const char* buffer, int length)
 
 /**
  * Convert a string representation of timezone name to tm_gmtoff
- * Timezone buffer MUST be valid timezone (strptime_regex ensure it)
+ * Timezone buffer MUST be valid timezone (tg_strptime_regex ensure it)
  * Return LONG_MIN on error
  */
-static long int atogmtoff(const char* buffer, int length)
+static long int tg_atogmtoff(const char* buffer, int length)
 {
     long int result;
 
@@ -820,7 +820,7 @@ static int tg_strptime_re(
         if (result < 0)
             return TG_ERROR;
 
-       tm.tm_gmtoff = atogmtoff(buffer, result);
+       tm.tm_gmtoff = tg_atogmtoff(buffer, result);
     }
 
     if (re_opt->has_timestamp >= 0) {
@@ -879,7 +879,7 @@ int tg_strptime_heuristic(const char* string, time_t* timestamp)
  * Return TG_NOT_FOUND if nothing found, parse or convert error
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
-static int get_timestamp(
+static int tg_get_timestamp(
     const char*           string,     // source string
     size_t                length,     // source string length
     const pcre*           re,         // compiled regular expression for datetime
@@ -941,7 +941,7 @@ static int get_timestamp(
  * Return TG_NOT_FOUND if newline delimeter exactly in position
  * Return TG_NULL if nothing found (whole data is single string without delimeter)
  */
-static int get_string(
+static int tg_get_string(
     const char* data,       // multiline data
     size_t      size,       // size of multiline data
     size_t      position,   // position to start search
@@ -979,7 +979,7 @@ static int get_string(
  * Return TG_NULL if whole data is single string
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
-static int forward_search(
+static int tg_forward_search(
     const char*       data,        // multiline data
     size_t            size,        // size of multiline data
     size_t            position,    // position to start search
@@ -1000,9 +1000,9 @@ static int forward_search(
 
     result = TG_NOT_FOUND;
     while (result == TG_NOT_FOUND && position < ubound) {
-        result = get_string(data, size, position, &_start, &_length);
+        result = tg_get_string(data, size, position, &_start, &_length);
         if (result == TG_FOUND) {
-            result = get_timestamp(
+            result = tg_get_timestamp(
                 &data[_start],
                 _length,
                 re,
@@ -1036,7 +1036,7 @@ static int forward_search(
  * Return TG_NULL if whole data is single string without delimeter
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
-static int binary_search(
+static int tg_binary_search(
     const char*       data,        // multiline data
     size_t            size,        // size of multiline data
     size_t            lbound,      // recommended lower bound postion to search
@@ -1060,7 +1060,7 @@ static int binary_search(
     middle = lbound + (ubound - lbound) / 2;
 
     while (lbound != middle) {
-        result = forward_search(
+        result = tg_forward_search(
             data,
             size,
             middle,
@@ -1105,7 +1105,7 @@ static int binary_search(
  * Return TG_NULL if whole data is single string without delimeter
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
-static int file_timegrep(
+static int tg_file_timegrep(
     const char*       data,       // multiline data
     size_t            size,       // size of multiline data
     time_t            start,      // start timestamp to search
@@ -1125,7 +1125,7 @@ static int file_timegrep(
     size_t  page_size = getpagesize();
     size_t  page_mask = ~(page_size - 1);
 
-    result = binary_search(
+    result = tg_binary_search(
         data,
         size,
         0,
@@ -1140,7 +1140,7 @@ static int file_timegrep(
     if (result != TG_FOUND)
         return result;
 
-    result = binary_search(
+    result = tg_binary_search(
         data,
         size,
         lbound,
@@ -1188,7 +1188,7 @@ static int file_timegrep(
  * Return TG_NOT_FOUND on EOF
  * Retrun TG_ERROR on error, errno is set on system error
  */
-static int read_stream_string(
+static int tg_read_stream_string(
     int     fd,       // file descriptor
     char**  data,     // frame data (may be reallocated)
     size_t* size,     // frame size (may be resized)
@@ -1242,7 +1242,7 @@ static int read_stream_string(
  * Return TG_NOT_FOUND if nothing found
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
-static int stream_timegrep(const tg_context* ctx)
+static int tg_stream_timegrep(const tg_context* ctx)
 {
     int     result;
     ssize_t actual;
@@ -1255,13 +1255,13 @@ static int stream_timegrep(const tg_context* ctx)
     int     stream = 0;
 
     while (1) {
-        result = read_stream_string(ctx->fd, &data, &size, lbound, &ubound, &length);
+        result = tg_read_stream_string(ctx->fd, &data, &size, lbound, &ubound, &length);
         if (result == TG_ERROR)
             goto ERROR;
         else if (result == TG_NOT_FOUND)
             break;
 
-        result = get_timestamp(data + lbound, length, ctx->re_ctx.re, ctx->re_ctx.re_extra, &ctx->re_ctx.re_opt, ctx->re_ctx.format, &timestamp);
+        result = tg_get_timestamp(data + lbound, length, ctx->re_ctx.re, ctx->re_ctx.re_extra, &ctx->re_ctx.re_opt, ctx->re_ctx.format, &timestamp);
         if (result == TG_ERROR)
             goto ERROR;
 
@@ -1315,7 +1315,7 @@ ERROR:
  * Return TG_NOT_FOUND if nothing to do (help or version printed)
  * Retrun TG_ERROR on error
  */
-int parse_options(int argc, char* argv[], tg_context* ctx)
+int tg_parse_options(int argc, char* argv[], tg_context* ctx)
 {
     // options parsing
     int      index;    // option index
@@ -1364,31 +1364,31 @@ int parse_options(int argc, char* argv[], tg_context* ctx)
                 to = optarg;
                 break;
             case 's':
-                value = parse_interval(optarg, 1);
+                value = tg_parse_interval(optarg, 1);
                 if (value == LONG_MIN)
                     goto ERROR;
                 offset += value;
                 break;
             case 'm':
-                value = parse_interval(optarg, 60);
+                value = tg_parse_interval(optarg, 60);
                 if (value == LONG_MIN)
                     goto ERROR;
                 offset += value;
                 break;
             case 'h':
-                value = parse_interval(optarg, 60 * 60);
+                value = tg_parse_interval(optarg, 60 * 60);
                 if (value == LONG_MIN)
                     goto ERROR;
                 offset += value;
                 break;
             case 'v':
-                print_version();
+                tg_print_version();
                 goto SUCCESS;
             case '?':
-                print_help();
+                tg_print_help();
                 goto SUCCESS;
             default:
-                print_help();
+                tg_print_help();
                 goto SUCCESS;
         }
     }
@@ -1415,7 +1415,7 @@ int parse_options(int argc, char* argv[], tg_context* ctx)
 
     memset(&ctx->re_ctx.re_opt, 0, sizeof(ctx->re_ctx.re_opt));
 
-    regex_len = strptime_regex(ctx->re_ctx.format, NULL, &ctx->re_ctx.re_opt);
+    regex_len = tg_strptime_regex(ctx->re_ctx.format, NULL, &ctx->re_ctx.re_opt);
     if (regex_len == TG_ERROR)
         goto ERROR;
 
@@ -1427,7 +1427,7 @@ int parse_options(int argc, char* argv[], tg_context* ctx)
 
     memset(&ctx->re_ctx.re_opt, 0, sizeof(ctx->re_ctx.re_opt));
 
-    if (strptime_regex(ctx->re_ctx.format, regex, &ctx->re_ctx.re_opt) == TG_ERROR)
+    if (tg_strptime_regex(ctx->re_ctx.format, regex, &ctx->re_ctx.re_opt) == TG_ERROR)
         goto ERROR;
 
     ctx->re_ctx.re = pcre_compile(regex, PCRE_UTF8 | PCRE_DUPNAMES, &pcre_error, &pcre_offset, NULL);
@@ -1510,14 +1510,14 @@ int main(int argc, char* argv[])
     struct stat file_stat;
     tg_context  ctx;
 
-    set_timezone();
+    tg_set_timezone();
 
     memset(&ctx, 0, sizeof(ctx));
 
     ctx.fd   = -1;
     ctx.data = MAP_FAILED;
 
-    result = parse_options(argc, argv, &ctx);
+    result = tg_parse_options(argc, argv, &ctx);
     if (result == TG_NOT_FOUND) {
         result = 0;
         goto SUCCESS;
@@ -1544,7 +1544,7 @@ int main(int argc, char* argv[])
             close(ctx.fd);
             ctx.fd = -1;
 
-            result = file_timegrep(
+            result = tg_file_timegrep(
                 ctx.data,
                 ctx.size,
                 ctx.start,
@@ -1563,7 +1563,7 @@ int main(int argc, char* argv[])
         }
     } else {
         ctx.fd = STDIN_FILENO;
-        result = stream_timegrep(&ctx);
+        result = tg_stream_timegrep(&ctx);
     }
 
     result = (result == TG_FOUND ? 0 : 1);
