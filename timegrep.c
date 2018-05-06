@@ -53,9 +53,15 @@
 static const char* TG_VERSION = "0.4alpha";
 
 /**
- * Chunk size for IO in bytes
+ * Default chunk size for io / memory in bytes (512KB)
  */
-static const size_t TG_CHUNK_SIZE = 512 * 1024;
+#ifndef TG_CHUNK_SIZE
+    #define TG_CHUNK_SIZE (512 * 1024)
+#endif
+
+#if TG_CHUNK_SIZE % 8192 != 0
+    #error "TG_CHUNK_SIZE must be aligned to 8192 bytes"
+#endif
 
 /**
  * Use TG_TIMEZONE instead glibc timezone external variable
@@ -151,6 +157,7 @@ typedef struct {
     char*       data;       // mapped memory
     time_t      start;      // timestamp from search
     time_t      stop;       // timestamp to search
+    size_t      chunk;      // io / memory chunk size
     tg_parser   parser;     // datetime parser context
 } tg_context;
 
@@ -1154,7 +1161,7 @@ static int tg_file_timegrep(const tg_context* ctx)
 
     lbound_aligned = lbound & page_mask;
     while (lbound < ubound) {
-        actual = TG_CHUNK_SIZE;
+        actual = ctx->chunk;
         if (lbound + actual >= ubound)
             actual = ubound - lbound;
 
@@ -1164,7 +1171,7 @@ static int tg_file_timegrep(const tg_context* ctx)
 
         lbound += actual;
 
-        if (lbound_aligned + TG_CHUNK_SIZE < lbound) {
+        if (lbound_aligned + ctx->chunk < lbound) {
             ubound_aligned = lbound & page_mask;
             if (lbound_aligned < ubound_aligned)
                 madvise((void*)(ctx->data + lbound_aligned), ubound_aligned - lbound_aligned, MADV_DONTNEED);
@@ -1187,6 +1194,7 @@ static int tg_file_timegrep(const tg_context* ctx)
  */
 static int tg_read_stream_string(
     int     fd,       // file descriptor
+    size_t  chunk,    // io / memory chunk size
     char**  data,     // frame data (may be reallocated)
     size_t* size,     // frame size (may be resized)
     size_t  lbound,   // lower bound frame position
@@ -1205,16 +1213,16 @@ static int tg_read_stream_string(
     }
 
     while (1) {
-        if ((*size) - (*ubound) < TG_CHUNK_SIZE) {
-            buffer = realloc(*data, (*size) + TG_CHUNK_SIZE * 2);
+        if ((*size) - (*ubound) < chunk) {
+            buffer = realloc(*data, (*size) + chunk * 2);
             if (buffer == NULL)
                 return TG_ERROR;
 
             *data  = buffer;
-            *size += TG_CHUNK_SIZE * 2;
+            *size += chunk * 2;
         }
 
-        actual = read(fd, (*data) + (*ubound), TG_CHUNK_SIZE);
+        actual = read(fd, (*data) + (*ubound), chunk);
         if (actual == -1)
             return TG_ERROR;
         else if (actual == 0)
@@ -1252,7 +1260,7 @@ static int tg_stream_timegrep(const tg_context* ctx)
     int     stream = 0;
 
     while (1) {
-        result = tg_read_stream_string(ctx->fd, &data, &size, lbound, &ubound, &length);
+        result = tg_read_stream_string(ctx->fd, ctx->chunk, &data, &size, lbound, &ubound, &length);
         if (result == TG_ERROR)
             goto ERROR;
         else if (result == TG_NOT_FOUND)
@@ -1472,6 +1480,8 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
         fprintf(stderr, gettext("%s Can not convert argument '%s' to timestamp\n"), gettext("ERROR:"), from);
         goto ERROR;
     }
+
+    ctx->chunk = TG_CHUNK_SIZE;
 
     result = TG_FOUND;
 
