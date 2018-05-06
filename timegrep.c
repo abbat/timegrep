@@ -1482,6 +1482,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
         goto ERROR;
     }
 
+    // TODO: adjust from command line
     ctx->chunk = TG_CHUNK_SIZE;
 
     result = TG_FOUND;
@@ -1511,6 +1512,7 @@ SUCCESS:
 int main(int argc, char* argv[])
 {
     int         result;
+    int         retval;
     struct stat file_stat;
     tg_context  ctx;
 
@@ -1529,6 +1531,7 @@ int main(int argc, char* argv[])
         goto ERROR;
 
     if (optind < argc) {
+        result = TG_NOT_FOUND;
         while (optind < argc) {
             ctx.filename = argv[optind++];
 
@@ -1548,10 +1551,11 @@ int main(int argc, char* argv[])
             close(ctx.fd);
             ctx.fd = -1;
 
-            // FIXME: for many files may be different result
-            result = tg_file_timegrep(&ctx);
-            if (result == TG_ERROR)
+            retval = tg_file_timegrep(&ctx));
+            if (retval == TG_ERROR)
                 goto ERROR;
+            else if (retval == TG_FOUND)
+                result = TG_FOUND;
 
             munmap(ctx.data, ctx.size);
             ctx.data = MAP_FAILED;
