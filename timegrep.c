@@ -559,6 +559,8 @@ static size_t tg_strptime_regex(const char* format, char* regex, int* format_tz,
     int         holder;
     tg_pcre_nsc nsc;
 
+    memset(&nsc, 0, sizeof(nsc));
+
     if (fallback == NULL)
         fallback = &holder;
     else
@@ -871,11 +873,10 @@ static int tg_strptime_re(
         return TG_FOUND;
     }
 
-    // FIXME: WTF?!
-    if (nsi->timezone == 0)
-        tm_gmtoff = TG_TIMEZONE;
-    else
+    if (nsi->timezone >= 0)
         tm_gmtoff = tm.tm_gmtoff;
+    else
+        tm_gmtoff = TG_TIMEZONE;
 
     *timestamp = timegm(&tm) - tm_gmtoff;
     if ((*timestamp) == -1)
