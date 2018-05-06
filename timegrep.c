@@ -1467,7 +1467,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
 
     if (to == NULL)
         ctx->stop = time(NULL);
-    else if (tg_strptime(to, ctx->parser.format, ctx->parser.nsi.timezone, &ctx->stop) == TG_NOT_FOUND && tg_strptime_heuristic(to, &ctx->stop) == TG_NOT_FOUND) {
+    else if (tg_strptime(to, ctx->parser.format, ctx->parser.format_tz, &ctx->stop) == TG_NOT_FOUND && tg_strptime_heuristic(to, &ctx->stop) == TG_NOT_FOUND) {
         errno = 0;
         fprintf(stderr, gettext("%s Can not convert argument '%s' to timestamp\n"), gettext("ERROR:"), to);
         goto ERROR;
@@ -1475,7 +1475,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
 
     if (from == NULL)
         ctx->start = ctx->stop - offset;
-    else if (tg_strptime(from, ctx->parser.format, ctx->parser.nsi.timezone, &ctx->start) == TG_NOT_FOUND && tg_strptime_heuristic(from, &ctx->start) == TG_NOT_FOUND) {
+    else if (tg_strptime(from, ctx->parser.format, ctx->parser.format_tz, &ctx->start) == TG_NOT_FOUND && tg_strptime_heuristic(from, &ctx->start) == TG_NOT_FOUND) {
         errno = 0;
         fprintf(stderr, gettext("%s Can not convert argument '%s' to timestamp\n"), gettext("ERROR:"), from);
         goto ERROR;
