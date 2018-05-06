@@ -50,7 +50,7 @@
 /**
  * Program version for --version, -v
  */
-static const char* TG_VERSION = "0.4beta";
+static const char* TG_VERSION = "0.4";
 
 /**
  * Default chunk size for io / memory in bytes (512KB)
@@ -1551,7 +1551,7 @@ int main(int argc, char* argv[])
             close(ctx.fd);
             ctx.fd = -1;
 
-            retval = tg_file_timegrep(&ctx));
+            retval = tg_file_timegrep(&ctx);
             if (retval == TG_ERROR)
                 goto ERROR;
             else if (retval == TG_FOUND)

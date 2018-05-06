@@ -1,3 +1,14 @@
+timegrep (0.4) unstable; urgency=low
+
+  * Fix memory exhausting on large files;
+  * Fix exit code for multiple files;
+  * Fix timezone parsing;
+  * Compile-time chunk size for io / memory;
+  * Add tskv format;
+  * Large code refactoring.
+
+ -- Anton Batenev <antonbatenev@yandex.ru>  Sun, 06 May 2018 15:27:26 +0300
+
 timegrep (0.3) unstable; urgency=low
 
   * Initial (restore from backup).
