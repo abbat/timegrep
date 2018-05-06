@@ -1029,17 +1029,17 @@ static int tg_forward_search(
 )
 {
     int    result;
-    size_t _start;
-    size_t _length;
-    time_t _timestamp;
+    size_t rstart;
+    size_t rlength;
+    time_t rtimestamp;
 
     result = TG_NOT_FOUND;
     while (result == TG_NOT_FOUND && position < ubound) {
-        result = tg_get_string(data, size, position, &_start, &_length);
+        result = tg_get_string(data, size, position, &rstart, &rlength);
         if (result == TG_FOUND) {
-            result = tg_get_timestamp(data + _start, _length, parser, &_timestamp);
+            result = tg_get_timestamp(data + rstart, rlength, parser, &rtimestamp);
             if (result == TG_NOT_FOUND)
-                position = _start + _length + 1;
+                position = rstart + rlength + 1;
         } else if (result == TG_NULL)
             break;
 
@@ -1047,9 +1047,9 @@ static int tg_forward_search(
     }
 
     if (result == TG_FOUND) {
-        *start     = _start;
-        *length    = _length;
-        *timestamp = _timestamp;
+        *start     = rstart;
+        *length    = rlength;
+        *timestamp = rtimestamp;
     }
 
     return result;
