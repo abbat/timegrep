@@ -50,7 +50,7 @@
 /**
  * Program version for --version, -v
  */
-static const char* TG_VERSION = "0.4alpha";
+static const char* TG_VERSION = "0.4beta";
 
 /**
  * Default chunk size for io / memory in bytes (512KB)
@@ -1065,9 +1065,9 @@ static int tg_forward_search(
 static int tg_binary_search(
     const char*      data,      // multiline data
     size_t           size,      // size of multiline data
-    size_t           lbound,    // recommended lower bound postion to search
-    time_t           search,    // timestamp to search
     const tg_parser* parser,    // datetime parser context
+    time_t           search,    // timestamp to search
+    size_t           lbound,    // recommended lower bound postion to search
     size_t*          position   // result string start
 )
 {
@@ -1139,9 +1139,9 @@ static int tg_file_timegrep(const tg_context* ctx)
     result = tg_binary_search(
         ctx->data,
         ctx->size,
-        0,
-        ctx->start,
         &ctx->parser,
+        ctx->start,
+        0,
         &lbound
     );
 
@@ -1151,9 +1151,9 @@ static int tg_file_timegrep(const tg_context* ctx)
     result = tg_binary_search(
         ctx->data,
         ctx->size,
-        lbound,
-        ctx->stop,
         &ctx->parser,
+        ctx->stop,
+        lbound,
         &ubound
     );
 
