@@ -50,7 +50,7 @@
 /**
  * Program version for --version, -v
  */
-static const char* TG_VERSION = "0.4";
+static const char* TG_VERSION = "0.5";
 
 /**
  * Default chunk size for io / memory in bytes (512KB)
@@ -1059,7 +1059,6 @@ static int tg_forward_search(
  * Binary search timestamp in multiline data
  * Return TG_FOUND on success
  * Return TG_NOT_FOUND if nothing found
- * Return TG_NULL if whole data is single string without delimeter
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_binary_search(
@@ -1071,6 +1070,7 @@ static int tg_binary_search(
     size_t*          position   // result string start
 )
 {
+    int    retval;
     int    result;
     size_t middle;
     size_t ubound;
@@ -1078,7 +1078,7 @@ static int tg_binary_search(
     size_t start;
     size_t length;
 
-    result = TG_NULL;
+    retval = TG_NOT_FOUND;
     ubound = size;
     middle = lbound + (ubound - lbound) / 2;
 
@@ -1101,28 +1101,28 @@ static int tg_binary_search(
                 if (lbound != ubound)
                     lbound++;
             } else if (timestamp >= search) {
-                ubound = start;
-                middle = ubound;
+                retval    = TG_FOUND;
+                ubound    = start;
+                middle    = ubound;
+                *position = start;
             }
         } else if (result == TG_NOT_FOUND)
             ubound = middle;
-        else   // TG_ERROR || TG_NULL
+        else if (result == TG_ERROR)
+            return TG_ERROR;
+        else
             break;
 
         middle = lbound + (middle - lbound) / 2;
     }
 
-    if (result == TG_FOUND)
-        *position = lbound;
-
-    return result;
+    return retval;
 }
 
 /**
  * File timegrep with binary search
  * Return TG_FOUND on success
  * Return TG_NOT_FOUND if nothing found
- * Return TG_NULL if whole data is single string without delimeter
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_file_timegrep(const tg_context* ctx)
@@ -1157,8 +1157,10 @@ static int tg_file_timegrep(const tg_context* ctx)
         &ubound
     );
 
-    if (result != TG_FOUND)
+    if (result == TG_ERROR)
         return result;
+    else if (result == TG_NOT_FOUND)
+        ubound = ctx->size;
 
     lbound_aligned = lbound & page_mask;
     while (lbound < ubound) {

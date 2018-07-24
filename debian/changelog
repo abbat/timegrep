@@ -1,3 +1,9 @@
+timegrep (0.5) unstable; urgency=low
+
+  * Fix multiline parsing.
+
+ -- Anton Batenev <antonbatenev@yandex.ru>  Tue, 24 Jul 2018 18:43:10 +0300
+
 timegrep (0.4) unstable; urgency=low
 
   * Fix memory exhausting on large files;
