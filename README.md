@@ -21,7 +21,7 @@ $ zcat archive.log.gz | timegrep --start='2017:09:01 15:23:00' --stop='2017:09:0
 * [Debian, Ubuntu](http://software.opensuse.org/download.html?project=home:antonbatenev:timegrep&package=timegrep)
 * [Fedora, openSUSE, CentOS](http://software.opensuse.org/download.html?project=home:antonbatenev:timegrep&package=timegrep)
 * [Ubuntu PPA](https://launchpad.net/~abbat/+archive/ubuntu/timegrep) - `ppa:abbat/timegrep`
-* [Arch](http://software.opensuse.org/download.html?project=home:antonbatenev:timegrep&package=timegrep), [Arch AUR](https://aur.archlinux.org/packages/timegrep/) (see also [AUR Helpers](https://wiki.archlinux.org/index.php/AUR_Helpers))
+* [Arch AUR](https://aur.archlinux.org/packages/timegrep/) (see also [AUR Helpers](https://wiki.archlinux.org/index.php/AUR_Helpers))
 * From source code:
 
 ```
