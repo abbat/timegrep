@@ -29,6 +29,12 @@ $ git clone https://github.com/abbat/timegrep.git
 $ make && sudo make install
 ```
 
+To compile with own flags use `USER_CFLAGS` and `USER_LDFLAGS` variables. For example for i386 static binary with [musl libc](https://www.musl-libc.org):
+
+```
+$ CC=musl-gcc32 USER_CFLAGS=-m32 USER_LDFLAGS='-L/usr/lib/i386-linux-gnu -m32 -static -Wl,-melf_i386' make
+```
+
 ## Usage
 
 ```
