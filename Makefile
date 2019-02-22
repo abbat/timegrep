@@ -3,7 +3,7 @@
 #
 
 NAME     := timegrep
-CC       := cc
+CC       ?= cc
 SOURCES  := $(NAME).c
 OBJECTS  := $(NAME).o
 CFLAGS   := -std=c99 --pedantic -Wall -Werror -O2 -fno-strict-aliasing
@@ -18,9 +18,11 @@ CFLAGS   += $(USER_CFLAGS)
 CPPFLAGS += $(USER_CPPFLAGS)
 LDFLAGS  += $(USER_LDFLAGS)
 
+.PHONY: $(NAME) all clean install
+
 all: $(NAME)
 
-$(NAME): $(SOURCES) $(OBJECTS)
+$(NAME): clean $(SOURCES) $(OBJECTS)
 	$(CC) -o $(NAME) $(OBJECTS) $(LDFLAGS)
 
 clean:
