@@ -50,7 +50,7 @@
 /**
  * Program version for --version, -v
  */
-static const char* TG_VERSION = "0.5";
+static const char* TG_VERSION = "0.6";
 
 /**
  * Default chunk size for io / memory in bytes (512KB)
@@ -1543,6 +1543,8 @@ int main(int argc, char* argv[])
 
             if (fstat(ctx.fd, &file_stat) == -1)
                 goto ERROR;
+            else if (file_stat.st_size == 0)
+                goto SUCCESS;
 
             ctx.size = file_stat.st_size;
 

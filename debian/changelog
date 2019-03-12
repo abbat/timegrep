@@ -1,3 +1,9 @@
+timegrep (0.6) unstable; urgency=low
+
+  * Fix "Invalid argument" error on empty file.
+
+ -- Anton Batenev <antonbatenev@yandex.ru>  Tue, 12 Mar 2019 12:11:41 +0300
+
 timegrep (0.5) unstable; urgency=low
 
   * Fix multiline parsing.
