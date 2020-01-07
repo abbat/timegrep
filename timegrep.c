@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2017-2018 Anton Batenev
+ * Copyright (c) 2017-2020 Anton Batenev
  *
  * All rights reserved.
  *
@@ -42,6 +42,7 @@
 #include <getopt.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <libintl.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -50,7 +51,7 @@
 /**
  * Program version for --version, -v
  */
-static const char* TG_VERSION = "0.6";
+static const char* TG_VERSION = "0.7";
 
 /**
  * Default chunk size for io / memory in bytes (512KB)
@@ -72,18 +73,18 @@ static time_t TG_TIMEZONE = 0;
 /**
  * Error codes
  */
-static const int TG_FOUND     = 2;    // something found
-static const int TG_NOT_FOUND = 1;    // nothing found
-static const int TG_NULL      = 0;    // undetermined result
-static const int TG_ERROR     = -1;   // unrecoverable error
+static const int TG_FOUND     = 2;    /* something found     */
+static const int TG_NOT_FOUND = 1;    /* nothing found       */
+static const int TG_NULL      = 0;    /* undetermined result */
+static const int TG_ERROR     = -1;   /* unrecoverable error */
 
 /**
  * Predefined datetime formats
  */
 static const struct {
-    const char* name;     // format name
-    const char* alias;    // format alias
-    const char* format;   // datetime format (see strptime)
+    const char* name;     /* format name                    */
+    const char* alias;    /* format alias                   */
+    const char* format;   /* datetime format (see strptime) */
 } TG_FORMATS[] = {
     {
         "default",
@@ -139,26 +140,26 @@ typedef tg_pcre_nsi tg_pcre_nsc;
  * datetime parser context
  */
 typedef struct {
-    pcre*       re;          // compiled regular expression for datetime
-    pcre_extra* extra;       // optimized regular expression for datetime
-    tg_pcre_nsi nsi;         // named regular expressions indexes or fallback flag
-    const char* format;      // datetime format for tg_strptime
-    int         format_tz;   // datetime format use timezone information
-    int         fallback;    // force use tg_strptime
+    pcre*       re;          /* compiled regular expression for datetime           */
+    pcre_extra* extra;       /* optimized regular expression for datetime          */
+    tg_pcre_nsi nsi;         /* named regular expressions indexes or fallback flag */
+    const char* format;      /* datetime format for tg_strptime                    */
+    int         format_tz;   /* datetime format use timezone information           */
+    int         fallback;    /* force use tg_strptime                              */
 } tg_parser;
 
 /**
  * working context
  */
 typedef struct {
-    const char* filename;   // current filename
-    int         fd;         // file descriptor
-    size_t      size;       // size of file / mapped memory
-    char*       data;       // mapped memory
-    time_t      start;      // timestamp from search
-    time_t      stop;       // timestamp to search
-    size_t      chunk;      // io / memory chunk size
-    tg_parser   parser;     // datetime parser context
+    const char* filename;   /* current filename             */
+    int         fd;         /* file descriptor              */
+    size_t      size;       /* size of file / mapped memory */
+    char*       data;       /* mapped memory                */
+    time_t      start;      /* timestamp from search        */
+    time_t      stop;       /* timestamp to search          */
+    size_t      chunk;      /* io / memory chunk size       */
+    tg_parser   parser;     /* datetime parser context      */
 } tg_context;
 
 /**
@@ -175,14 +176,16 @@ static void tg_print_version()
 static void tg_print_help()
 {
     size_t i;
-    size_t l;
-    int    m;
+    int    len;
+    int    width = 0;
 
+    printf("\n");
     printf(gettext(
-        "\n"
         "Usage:\n"
-        "   timegrep [options] [files]\n"
-        "\n"
+        "   timegrep [options] [files]"
+    ));
+    printf("\n\n");
+    printf(gettext(
         "Options:\n"
         "   --format,  -e -- datetime format (default: 'default')\n"
         "   --start,   -f -- datetime to start search (default: now)\n"
@@ -191,34 +194,36 @@ static void tg_print_help()
         "   --minutes, -m -- minutes to substract from --start (default: 0)\n"
         "   --hours,   -h -- hours to substract from --start (default: 0)\n"
         "   --version, -v -- print program version and exit\n"
-        "   --help,    -? -- print this help message\n"
-        "\n"
-        "Formats:\n"
+        "   --help,    -? -- print this help message"
     ));
+    printf("\n\n");
+    printf(gettext(
+        "Formats:"
+    ));
+    printf("\n");
 
-    m = 0;
     i = 0;
     while (TG_FORMATS[i].name != NULL) {
-        l = strlen(TG_FORMATS[i].name);
-        if (l > m)
-            m = l;
+        len = (int)strlen(TG_FORMATS[i].name);
+        if (len > width)
+            width = len;
         i++;
     }
 
     i = 0;
     while (TG_FORMATS[i].name != NULL) {
         if (TG_FORMATS[i].alias != NULL)
-            printf("   %-*s -- %s '%s'\n", m, TG_FORMATS[i].name, gettext("alias for"), TG_FORMATS[i].alias);
+            printf("   %-*s -- %s '%s'\n", width, TG_FORMATS[i].name, gettext("alias for"), TG_FORMATS[i].alias);
         else
-            printf("   %-*s -- %s\n", m, TG_FORMATS[i].name, TG_FORMATS[i].format);
+            printf("   %-*s -- %s\n", width, TG_FORMATS[i].name, TG_FORMATS[i].format);
         i++;
     }
 
+    printf("\n");
     printf(gettext(
-        "\n"
-        "See strptime(3) for format details\n"
-        "\n"
+        "See strptime(3) for format details"
     ));
+    printf("\n\n");
 }
 
 /**
@@ -259,6 +264,7 @@ static long int tg_parse_interval(const char* string, long int multipler)
 
 /**
  * Internal recursion of tg_strptime_regex
+ * Return SIZE_MAX on error
  */
 static size_t tg_strptime_regex_nsc(const char* format, char* regex, int* fallback, tg_pcre_nsc* nsc)
 {
@@ -282,29 +288,33 @@ static size_t tg_strptime_regex_nsc(const char* format, char* regex, int* fallba
             if (format_index + 1 == format_length) {
                 errno = 0;
                 fprintf(stderr, gettext("%s Unexpected format char '%%' at end of format string\n"), gettext("ERROR:"));
-                return TG_ERROR;
+                return SIZE_MAX;
             }
 
             c = format[format_index + 1];
             format_index++;
 
-            // http://www.pcre.org/original/doc/html/pcresyntax.html#SEC1
+            /* http://www.pcre.org/original/doc/html/pcresyntax.html#SEC1 */
             switch (c) {
-                // The % character
+                /* The % character */
                 case '%':
                     part = "%";
                     break;
 
-                // The weekday name according to the current locale, in abbreviated form or the full name.
-                // timegrep use only English forms as all world do
+                /**
+                 * The weekday name according to the current locale, in abbreviated form or the full name.
+                 * timegrep use only English forms as all world do
+                 */
                 case 'a':
                 case 'A':
                     part = "(Mon|Monday|Tue|Tuesday|Wed|Wednesday|Thu|Thursday|Fri|Friday|Sat|Saturday|Sun|Sunday)";
                     *fallback = 1;
                     break;
 
-                // The month name according to the current locale, in abbreviated form or the full name
-                // timegrep use only English forms as all world do
+                /**
+                 * The month name according to the current locale, in abbreviated form or the full name
+                 * timegrep use only English forms as all world do
+                 */
                 case 'b':
                 case 'B':
                 case 'h':
@@ -312,200 +322,214 @@ static size_t tg_strptime_regex_nsc(const char* format, char* regex, int* fallba
                     nsc->month_t++;
                     break;
 
-                // The date and time representation for the current locale
-                // timegrep use heuristic here
+                /**
+                 * The date and time representation for the current locale
+                 * timegrep use heuristic here
+                 */
                 case 'c':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%x %X", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // The century number (0-99)
+                /* The century number (0-99) */
                 case 'C':
                     part = "\\d{1,2}";
                     *fallback = 1;
                     break;
 
-                // The day of month (1-31)
+                /* The day of month (1-31) */
                 case 'd':
                 case 'e':
                     part = "(?P<day>[1-2][0-9]|3[0-1]|0?[1-9])";
                     nsc->day++;
                     break;
 
-                // Equivalent to %m/%d/%y (American style date)
+                /* Equivalent to %m/%d/%y (American style date) */
                 case 'D':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%m/%d/%y", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // The hour (0-23)
+                /* The hour (0-23) */
                 case 'H':
                     part = "(?P<hour>1[0-9]|2[0-3]|0?[0-9])";
                     nsc->hour++;
                     break;
 
-                // The hour on a 12-hour clock (1-12)
+                /* The hour on a 12-hour clock (1-12) */
                 case 'I':
                     part = "(1[0-2]|0?[1-9])";
                     *fallback = 1;
                     break;
 
-                // The day number in the year (1-366)
+                /* The day number in the year (1-366) */
                 case 'j':
                     part = "([1-2][0-9][0-9]|3[0-5][0-9]|36[0-6]|0?[1-9][0-9]|0{0,2}[1-9])";
                     *fallback = 1;
                     break;
 
-                // The month number (1-12)
+                /* The month number (1-12) */
                 case 'm':
                     part = "(?P<month>1[0-2]|0?[1-9])";
                     nsc->month++;
                     break;
 
-                // The minute (0-59)
+                /* The minute (0-59) */
                 case 'M':
                     part = "(?P<minute>[1-5][0-9]|0?[0-9])";
                     nsc->minute++;
                     break;
 
-                // Arbitrary whitespace
+                /* Arbitrary whitespace */
                 case 'n':
                 case 't':
                     part = "\\s";
                     break;
 
-                // The locale's equivalent of AM or PM
-                // timegrep use only English forms as all world do
+                /**
+                 * The locale's equivalent of AM or PM
+                 * timegrep use only English forms as all world do
+                 */
                 case 'p':
                     part = "(AM|PM)";
                     *fallback = 1;
                     break;
 
-                // The 12-hour clock time (using the locale's AM or PM), Equivalent to %I:%M:%S %p
+                /* The 12-hour clock time (using the locale's AM or PM), Equivalent to %I:%M:%S %p */
                 case 'r':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%I:%M:%S %p", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // Equivalent to %H:%M
+                /* Equivalent to %H:%M */
                 case 'R':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%H:%M", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // The second (0-60)
+                /* The second (0-60) */
                 case 'S':
                     part = "(?P<second>[1-5][0-9]|60|0?[0-9])";
                     nsc->second++;
                     break;
 
-                // Equivalent to %H:%M:%S
+                /* Equivalent to %H:%M:%S */
                 case 'T':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%H:%M:%S", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // The week number with Sunday the first day of the week (0-53)
+                /* The week number with Sunday the first day of the week (0-53) */
                 case 'U':
-                // The week number with Monday the first day of the week (0-53)
+                /* The week number with Monday the first day of the week (0-53) */
                 case 'W':
                     part = "([1-4][0-9]|5[0-3]|0?[0-9])";
                     *fallback = 1;
                     break;
 
-                // The weekday number (0-6) with Sunday = 0
+                /* The weekday number (0-6) with Sunday = 0 */
                 case 'w':
                     part = "[0-6]";
                     *fallback = 1;
                     break;
 
-                // The date, using the locale's date format
-                // timegrep use %Y-%m-%d (also known as %F)
+                /**
+                 * The date, using the locale's date format
+                 * timegrep use %Y-%m-%d (also known as %F)
+                 */
                 case 'x':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%Y-%m-%d", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // The time, using the locale's time format
-                // timegrep use %H:%M:%S (also known as %T)
+                /**
+                 * The time, using the locale's time format
+                 * timegrep use %H:%M:%S (also known as %T)
+                 */
                 case 'X':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%H:%M:%S", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // The year within century (0-99)
+                /* The year within century (0-99) */
                 case 'y':
                     part = "\\d{1,2}";
                     *fallback = 1;
                     break;
 
-                // The year, including century (for example, 1991)
+                /* The year, including century (for example, 1991) */
                 case 'Y':
                     part = "(?P<year>\\d{4})";
                     nsc->year++;
                     break;
 
-                // E or O modifier characters to indicate that an alternative format or specification
-                // not supported by timegrep
+                /**
+                 * E or O modifier characters to indicate that an alternative format or specification
+                 * not supported by timegrep
+                 */
                 case 'O':
                 case 'E':
                     errno = 0;
                     fprintf(stderr, gettext("%s 'O' and 'E' modifiers not supported by timegrep\n"), gettext("ERROR:"));
-                    return TG_ERROR;
+                    return SIZE_MAX;
 
-                //
-                // Glibc
-                //
+                /**
+                 * Glibc
+                 */
 
-                // Equivalent to %Y-%m-%d
+                /* Equivalent to %Y-%m-%d */
                 case 'F':
                     part         = NULL;
                     regex_index += tg_strptime_regex_nsc("%Y-%m-%d", (regex == NULL ? NULL : &regex[regex_index]), fallback, nsc);
                     break;
 
-                // The year corresponding to the ISO week number, but without the century (0-99)
+                /* The year corresponding to the ISO week number, but without the century (0-99) */
                 case 'g':
                     part = "\\d{1,2}";
                     *fallback = 1;
                     break;
 
-                // The year corresponding to the ISO week number
+                /* The year corresponding to the ISO week number */
                 case 'G':
                     part = "\\d{4}";
                     *fallback = 1;
                     break;
 
-                // The day of the week as a decimal number (1-7, where Monday = 1)
+                /* The day of the week as a decimal number (1-7, where Monday = 1) */
                 case 'u':
                     part = "[1-7]";
                     *fallback = 1;
                     break;
 
-                // The ISO 8601:1988 week number as a decimal number (1-53)
+                /* The ISO 8601:1988 week number as a decimal number (1-53) */
                 case 'V':
                     part = "([1-4][0-9]|5[0-3]|0?[1-9])";
                     *fallback = 1;
                     break;
 
-                // An RFC-822/ISO 8601 standard timezone specification
-                // https://tools.ietf.org/html/rfc822#section-5
+                /**
+                 * An RFC-822/ISO 8601 standard timezone specification
+                 * https://tools.ietf.org/html/rfc822#section-5
+                 */
                 case 'z':
                     part = "(?P<timezone>((\\+|\\-)\\d{2}:?\\d{2})|UT|UTC|GMT|EST|EDT|CST|CDT|MST|MDT|PST|PDT|[A-Z])";
                     nsc->timezone++;
                     break;
 
-                // The timezone name
-                // PST8PDT, America
-                // Etc/UTC, Etc/GMT+2, Etc/GMT-3, Asia/Kuala_Lumpur, America/Port-au-Prince
-                // America/Argentina/Rio_Gallegos, America/Argentina/ComodRivadavia
+                /**
+                 * The timezone name
+                 * PST8PDT, America
+                 * Etc/UTC, Etc/GMT+2, Etc/GMT-3, Asia/Kuala_Lumpur, America/Port-au-Prince
+                 * America/Argentina/Rio_Gallegos, America/Argentina/ComodRivadavia
+                 */
                 case 'Z':
-                    // FIXME: if you feel a power
+                    /* FIXME: if you feel a power */
                     part = "[A-Za-z0-9_\\+\\-/]{3,33}";
                     *fallback = 1;
                     nsc->timezone++;
                     break;
 
-                // The number of seconds since the Epoch
+                /* The number of seconds since the Epoch */
                 case 's':
                     part = "(?P<timestamp>\\d{1,20})";
                     nsc->timestamp++;
@@ -514,7 +538,7 @@ static size_t tg_strptime_regex_nsc(const char* format, char* regex, int* fallba
                 default:
                     errno = 0;
                     fprintf(stderr, gettext("%s Unexpected format char '%c'\n"), gettext("ERROR:"), c);
-                    return TG_ERROR;
+                    return SIZE_MAX;
             }
 
             if (part != NULL) {
@@ -524,8 +548,8 @@ static size_t tg_strptime_regex_nsc(const char* format, char* regex, int* fallba
 
                 regex_index += part_length;
 
-            } else if (regex_index == TG_ERROR)
-                return TG_ERROR;
+            } else if (regex_index == SIZE_MAX)
+                return SIZE_MAX;
 
         } else if (memchr(escape, c, escape_length) != NULL) {
             if (regex != NULL) {
@@ -551,7 +575,7 @@ static size_t tg_strptime_regex_nsc(const char* format, char* regex, int* fallba
  * regex and fallback may be NULL to found result regex length
  * Return fallback = 1 to force use tg_strptime
  * Return length of result regex on success
- * Retrun TG_ERROR on error
+ * Retrun SIZE_MAX on error
  */
 static size_t tg_strptime_regex(const char* format, char* regex, int* format_tz, int* fallback)
 {
@@ -608,14 +632,14 @@ static size_t tg_strptime_regex(const char* format, char* regex, int* format_tz,
  * Return TG_NOT_FOUND if nothing found or convert error
  */
 static int tg_strptime(
-    const char* string,      // source string
-    const char* format,      // datetime format (see strptime)
-    int         format_tz,   // datetime format use timezone information
-    time_t*     timestamp    // result timestamp
+    const char* string,      /* source string                            */
+    const char* format,      /* datetime format (see strptime)           */
+    int         format_tz,   /* datetime format use timezone information */
+    time_t*     timestamp    /* result timestamp                         */
 )
 {
     struct tm tm;
-    long int  tm_gmtoff;
+    time_t    tm_gmtoff;
 
     memset(&tm, 0, sizeof(struct tm));
     if (strptime(string, format, &tm) == NULL)
@@ -659,32 +683,28 @@ static int tg_atom(const char* buffer, int length)
         return TG_ERROR;
 
     switch (buffer[0]) {
-        // Apr
-        // Aug
+        /* Apr, Aug */
         case 'A':
             return (buffer[1] == 'p' ? 3 : 7);
-        // Dec
+        /* Dec */
         case 'D':
             return 11;
-        // Feb
+        /* Feb */
         case 'F':
             return 1;
-        // Jan
-        // Jul
-        // Jun
+        /* Jan, Jul, Jun */
         case 'J':
             return (buffer[1] == 'a' ? 0 : (buffer[2] == 'n' ? 5 : 6));
-        // Mar
-        // May
+        /* Mar, May */
         case 'M':
             return (buffer[2] == 'r' ? 2 : 4);
-        // Nov
+        /* Nov */
         case 'N':
             return 10;
-        // Oct
+        /* Oct */
         case 'O':
             return 9;
-        // Sep
+        /* Sep */
         case 'S':
             return 8;
     }
@@ -702,17 +722,17 @@ static long int tg_atogmtoff(const char* buffer, int length)
     long int result;
 
     if (length == 5) {
-        // +0000
+        /* +0000 */
         result = (((buffer[1] - '0') * 10) + (buffer[2] - '0')) * 60 * 60 + (((buffer[3] - '0') * 10) + (buffer[4] - '0')) * 60;
         if (buffer[0] == '-')
             result = -result;
     } else if (length == 6) {
-        // +00:00
+        /* +00:00 */
         result = (((buffer[1] - '0') * 10) + (buffer[2] - '0')) * 60 * 60 + (((buffer[4] - '0') * 10) + (buffer[5] - '0')) * 60;
         if (buffer[0] == '-')
             result = -result;
     } else if (length == 1) {
-        // military
+        /* military */
         switch (buffer[0]) {
             case 'A': result = -1;  break;
             case 'B': result = -2;  break;
@@ -746,24 +766,24 @@ static long int tg_atogmtoff(const char* buffer, int length)
         result = result * 60 * 60;
     } else if (length >= 2) {
         switch (buffer[0]) {
-            // UT, UTC, GMT
+            /* UT, UTC, GMT */
             case 'U':
             case 'G':
                 result = 0;
                 break;
-            // EST, EDT
+            /* EST, EDT */
             case 'E':
                 result = (buffer[1] == 'S' ? -5 : -4);
                 break;
-            // CST, CDT
+            /* CST, CDT */
             case 'C':
                 result = (buffer[1] == 'S' ? -6 : -5);
                 break;
-            // MST, MDT
+            /* MST, MDT */
             case 'M':
                 result = (buffer[1] == 'S' ? -7 : -6);
                 break;
-            // PST, PDT
+            /* PST, PDT */
             case 'P':
                 result = (buffer[1] == 'S' ? -8 : -7);
                 break;
@@ -785,16 +805,16 @@ static long int tg_atogmtoff(const char* buffer, int length)
  * Return TG_ERROR on error - so we need fallback
  */
 static int tg_strptime_re(
-    const char*        string,     // source string (pcre_exec subject)
-    int*               matches,    // offset vector that pcre_exec used
-    int                count,      // value returned by pcre_exec
-    const tg_pcre_nsi* nsi,        // named regular expressions indexes or fallback flag
-    time_t*            timestamp   // result timestamp
+    const char*        string,     /* source string (pcre_exec subject)                  */
+    int*               matches,    /* offset vector that pcre_exec used                  */
+    int                count,      /* value returned by pcre_exec                        */
+    const tg_pcre_nsi* nsi,        /* named regular expressions indexes or fallback flag */
+    time_t*            timestamp   /* result timestamp                                   */
 )
 {
     int       result;
     struct tm tm;
-    long int  tm_gmtoff;
+    time_t    tm_gmtoff;
     char      buffer[35];
 
     memset(&tm, 0, sizeof(tm));
@@ -920,17 +940,21 @@ int tg_strptime_heuristic(const char* string, time_t* timestamp)
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_get_timestamp(
-    const char*      string,     // source string
-    size_t           length,     // source string length
-    const tg_parser* parser,     // datetime parser context
-    time_t*          timestamp   // result timestamp
+    const char*      string,     /* source string           */
+    size_t           length,     /* source string length    */
+    const tg_parser* parser,     /* datetime parser context */
+    time_t*          timestamp   /* result timestamp        */
 )
 {
     int         result;
     const char* match;
     int         matches[30];
 
-    result = pcre_exec(parser->re, parser->extra, string, length, 0, 0, matches, sizeof(matches) / sizeof(int));
+    /* pcre_exec accept int as length */
+    if (length > (size_t)INT_MAX)
+        return TG_NOT_FOUND;
+
+    result = pcre_exec(parser->re, parser->extra, string, (int)length, 0, 0, matches, sizeof(matches) / sizeof(int));
     if (result < 0) {
         switch (result) {
             case PCRE_ERROR_NOMATCH:
@@ -942,6 +966,7 @@ static int tg_get_timestamp(
                 return TG_NOT_FOUND;
             case PCRE_ERROR_NOMEMORY:
                 errno = ENOMEM;
+                break;
             default:
                 errno = 0;
                 fprintf(stderr, gettext("%s pcre_exec error %i\n"), gettext("ERROR:"), result);
@@ -980,11 +1005,11 @@ static int tg_get_timestamp(
  * Return TG_NULL if nothing found (whole data is single string without delimeter)
  */
 static int tg_get_string(
-    const char* data,       // multiline data
-    size_t      size,       // size of multiline data
-    size_t      position,   // position to start search
-    size_t*     start,      // result string start
-    size_t*     length      // result string length (not including delimeter)
+    const char* data,       /* multiline data                                 */
+    size_t      size,       /* size of multiline data                         */
+    size_t      position,   /* position to start search                       */
+    size_t*     start,      /* result string start                            */
+    size_t*     length      /* result string length (not including delimeter) */
 )
 {
     char* nl;
@@ -996,13 +1021,13 @@ static int tg_get_string(
     if (nl == NULL)
         *start = 0;
     else
-        *start = nl - data + 1;
+        *start = (size_t)(nl - data) + 1;
 
     nl = memchr(data + position, '\n', size - position);
     if (nl == NULL)
         *length = size - (*start);
     else
-        *length = nl - data - (*start);
+        *length = (size_t)(nl - data) - (*start);
 
     if ((*length) == size)
         return TG_NULL;
@@ -1018,14 +1043,14 @@ static int tg_get_string(
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_forward_search(
-    const char*      data,       // multiline data
-    size_t           size,       // size of multiline data
-    size_t           position,   // position to start search
-    size_t           ubound,     // upper bound position to search
-    const tg_parser* parser,     // datetime parser context
-    size_t*          start,      // result string start
-    size_t*          length,     // result string length (not including delimeter)
-    time_t*          timestamp   // result timestamp
+    const char*      data,       /* multiline data                                 */
+    size_t           size,       /* size of multiline data                         */
+    size_t           position,   /* position to start search                       */
+    size_t           ubound,     /* upper bound position to search                 */
+    const tg_parser* parser,     /* datetime parser context                        */
+    size_t*          start,      /* result string start                            */
+    size_t*          length,     /* result string length (not including delimeter) */
+    time_t*          timestamp   /* result timestamp                               */
 )
 {
     int    result;
@@ -1062,12 +1087,12 @@ static int tg_forward_search(
  * Retrun TG_ERROR on error, errno is set on system error and 0 on pcre error
  */
 static int tg_binary_search(
-    const char*      data,      // multiline data
-    size_t           size,      // size of multiline data
-    const tg_parser* parser,    // datetime parser context
-    time_t           search,    // timestamp to search
-    size_t           lbound,    // recommended lower bound postion to search
-    size_t*          position   // result string start
+    const char*      data,      /* multiline data                            */
+    size_t           size,      /* size of multiline data                    */
+    const tg_parser* parser,    /* datetime parser context                   */
+    time_t           search,    /* timestamp to search                       */
+    size_t           lbound,    /* recommended lower bound postion to search */
+    size_t*          position   /* result string start                       */
 )
 {
     int    retval;
@@ -1131,9 +1156,10 @@ static int tg_file_timegrep(const tg_context* ctx)
     size_t  lbound;
     size_t  ubound;
     ssize_t actual;
+    size_t  length;
     size_t  lbound_aligned;
     size_t  ubound_aligned;
-    size_t  page_size = getpagesize();
+    size_t  page_size = (size_t)getpagesize();
     size_t  page_mask = ~(page_size - 1);
 
     result = tg_binary_search(
@@ -1164,15 +1190,15 @@ static int tg_file_timegrep(const tg_context* ctx)
 
     lbound_aligned = lbound & page_mask;
     while (lbound < ubound) {
-        actual = ctx->chunk;
-        if (lbound + actual >= ubound)
-            actual = ubound - lbound;
+        length = ctx->chunk;
+        if (lbound + length >= ubound)
+            length = ubound - lbound;
 
-        actual = write(STDOUT_FILENO, ctx->data + lbound, actual);
+        actual = write(STDOUT_FILENO, ctx->data + lbound, length);
         if (actual == -1)
             return TG_ERROR;
 
-        lbound += actual;
+        lbound += (size_t)actual;
 
         if (lbound_aligned + ctx->chunk < lbound) {
             ubound_aligned = lbound & page_mask;
@@ -1196,13 +1222,13 @@ static int tg_file_timegrep(const tg_context* ctx)
  * Retrun TG_ERROR on error, errno is set on system error
  */
 static int tg_read_stream_string(
-    int     fd,       // file descriptor
-    size_t  chunk,    // io / memory chunk size
-    char**  data,     // frame data (may be reallocated)
-    size_t* size,     // frame size (may be resized)
-    size_t  lbound,   // lower bound frame position
-    size_t* ubound,   // upper bound frame position
-    size_t* length    // found string length
+    int     fd,       /* file descriptor                 */
+    size_t  chunk,    /* io / memory chunk size          */
+    char**  data,     /* frame data (may be reallocated) */
+    size_t* size,     /* frame size (may be resized)     */
+    size_t  lbound,   /* lower bound frame position      */
+    size_t* ubound,   /* upper bound frame position      */
+    size_t* length    /* found string length             */
 )
 {
     char*   nl;
@@ -1211,7 +1237,7 @@ static int tg_read_stream_string(
 
     nl = memchr((*data) + lbound, '\n', (*ubound) - lbound);
     if (nl != NULL) {
-        *length = (nl - (*data)) - lbound;
+        *length = (size_t)(nl - (*data)) - lbound;
         return TG_FOUND;
     }
 
@@ -1231,12 +1257,12 @@ static int tg_read_stream_string(
         else if (actual == 0)
             return TG_NOT_FOUND;
 
-        nl = memchr((*data) + (*ubound), '\n', actual);
+        nl = memchr((*data) + (*ubound), '\n', (size_t)actual);
 
-        *ubound += actual;
+        *ubound += (size_t)actual;
 
         if (nl != NULL) {
-            *length = (nl - (*data)) - lbound;
+            *length = (size_t)(nl - (*data)) - lbound;
             break;
         }
     }
@@ -1288,8 +1314,8 @@ static int tg_stream_timegrep(const tg_context* ctx)
                 if (actual == -1)
                     goto ERROR;
 
-                length -= actual;
-                lbound += actual;
+                length -= (size_t)actual;
+                lbound += (size_t)actual;
             }
         } else
             lbound += length + 1;
@@ -1325,21 +1351,21 @@ ERROR:
  */
 int tg_parse_options(int argc, char* argv[], tg_context* ctx)
 {
-    // options parsing
-    int      index;    // option index
-    int      option;   // option name
-    long int value;    // option numeric value
+    /* options parsing */
+    int      index;    /* option index         */
+    int      option;   /* option name          */
+    long int value;    /* option numeric value */
 
-    // options values
-    const char* from   = NULL;   // from datetime
-    const char* to     = NULL;   // to datetime
-    long int    offset = 0;      // offset in seconds from now
+    /* options values */
+    const char* from   = NULL;   /* from datetime              */
+    const char* to     = NULL;   /* to datetime                */
+    long int    offset = 0;      /* offset in seconds from now */
 
-    // pcre
-    char*       regex       = NULL;   // format regular expression
-    size_t      regex_len   = 0;      // length of regex string
-    const char* pcre_error  = NULL;   // current pcre error message
-    int         pcre_offset = 0;      // current pcre error offset
+    /* pcre */
+    char*       regex       = NULL;   /* format regular expression  */
+    size_t      regex_len   = 0;      /* length of regex string     */
+    const char* pcre_error  = NULL;   /* current pcre error message */
+    int         pcre_offset = 0;      /* current pcre error offset  */
 
     int result = TG_NOT_FOUND;
 
@@ -1422,7 +1448,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
         ctx->parser.format = TG_FORMATS[0].format;
 
     regex_len = tg_strptime_regex(ctx->parser.format, NULL, NULL, NULL);
-    if (regex_len == TG_ERROR)
+    if (regex_len == SIZE_MAX)
         goto ERROR;
 
     regex = malloc(regex_len + 1);
@@ -1431,7 +1457,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
 
     regex[regex_len] = 0;
 
-    if (tg_strptime_regex(ctx->parser.format, regex, &ctx->parser.format_tz, &ctx->parser.fallback) == TG_ERROR)
+    if (tg_strptime_regex(ctx->parser.format, regex, &ctx->parser.format_tz, &ctx->parser.fallback) == SIZE_MAX)
         goto ERROR;
 
     ctx->parser.re = pcre_compile(regex, PCRE_UTF8 | PCRE_DUPNAMES, &pcre_error, &pcre_offset, NULL);
@@ -1484,7 +1510,7 @@ int tg_parse_options(int argc, char* argv[], tg_context* ctx)
         goto ERROR;
     }
 
-    // TODO: adjust from command line
+    /* TODO: adjust from command line */
     ctx->chunk = TG_CHUNK_SIZE;
 
     result = TG_FOUND;
@@ -1546,7 +1572,8 @@ int main(int argc, char* argv[])
             else if (file_stat.st_size == 0)
                 goto SUCCESS;
 
-            ctx.size = file_stat.st_size;
+            /* preferred to compile with -D_FILE_OFFSET_BITS=64 */
+            ctx.size = (size_t)file_stat.st_size;
 
             ctx.data = mmap(NULL, ctx.size, PROT_READ, MAP_PRIVATE, ctx.fd, 0);
             if (ctx.data == MAP_FAILED)

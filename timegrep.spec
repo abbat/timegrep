@@ -1,5 +1,5 @@
 Name:          timegrep
-Version:       0.6
+Version:       0.7
 Release:       1
 Summary:       Utility to grep log between two dates or tail last lines to time ago
 Group:         Productivity/Text/Utilities
@@ -47,5 +47,5 @@ rm -rf %{buildroot}
 
 
 %changelog
-* Tue Mar 12 2019 Anton Batenev <antonbatenev@yandex.ru> 0.6-1
+* Tue Jan 07 2020 Anton Batenev <antonbatenev@yandex.ru> 0.7-1
 - Initial RPM release

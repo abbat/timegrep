@@ -6,9 +6,9 @@ NAME     := timegrep
 CC       ?= cc
 SOURCES  := $(NAME).c
 OBJECTS  := $(NAME).o
-CFLAGS   := -std=c99 --pedantic -Wall -Werror -O2 -fno-strict-aliasing
-CPPFLAGS :=
-LDFLAGS  := -lpcre -lpthread
+CFLAGS   := -ansi -pedantic -pedantic-errors -Wall -Werror -Wextra -Wconversion -O2
+CPPFLAGS := -D_FILE_OFFSET_BITS=64
+LDFLAGS  := -lpcre
 
 PREFIX   ?= /usr
 BINDIR   := $(PREFIX)/bin
@@ -30,7 +30,7 @@ clean:
 	rm -f $(OBJECTS)
 
 %.o: %.c
-	$(CC) $(CFLAGS) $< -c -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 install: $(NAME)
 	mkdir -p $(abspath $(DESTDIR)/$(BINDIR))

@@ -3,7 +3,7 @@ Upstream-Name: timegrep
 Source: https://github.com/abbat/timegrep
 
 Files: *
-Copyright: 2017-2018, Anton Batenev <antonbatenev@yandex.ru>
+Copyright: 2017-2020, Anton Batenev <antonbatenev@yandex.ru>
 License: BSD
 
 License: BSD

@@ -1,3 +1,10 @@
+timegrep (0.7) unstable; urgency=low
+
+  * Fix PCRE_ERROR_NOMEMORY handler;
+  * Fix compiler warnings, ANSI C compatible.
+
+ -- Anton Batenev <antonbatenev@yandex.ru>  Tue, 07 Jan 2020 22:05:50 +0300
+
 timegrep (0.6) unstable; urgency=low
 
   * Fix "Invalid argument" error on empty file.
